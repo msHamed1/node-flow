@@ -1,0 +1,19 @@
+{
+  "name": "nodescope-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "build": "pnpm --filter @nodescope/protocol build && pnpm --filter @nodescope/topology-engine build && pnpm --filter @nodescope/core build && pnpm --filter @nodescope/instrumentation-node build && pnpm --filter @nodescope/instrumentation-nestjs build && pnpm --filter @nodescope/dashboard build && pnpm --filter @nodescope/collector build && pnpm --filter nodescope build && pnpm --filter @nodescope/demo-nestjs build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "pnpm -r lint",
+    "demo": "pnpm build && node packages/cli/dist/index.js dev -- node apps/demo-nestjs/dist/main.js",
+    "clean": "pnpm -r clean"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.1"
+  }
+}

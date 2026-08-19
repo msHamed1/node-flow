@@ -1,0 +1,19 @@
+{
+  "name": "nodescope",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "nodescope": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@nodescope/collector": "workspace:*",
+    "@nodescope/instrumentation-node": "workspace:*"
+  }
+}
