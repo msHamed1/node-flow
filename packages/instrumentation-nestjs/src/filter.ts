@@ -1,5 +1,5 @@
 import { Scope } from '@nestjs/common';
-import type { ResolvedNodeScopeTracingOptions } from './options.js';
+import type { ResolvedNodeFlowTracingOptions } from './options.js';
 
 export interface DiscoverableProvider {
   instance?: unknown;
@@ -37,7 +37,7 @@ const internalProviderSuffixes = ['ExceptionFilter', 'Guard', 'Interceptor', 'Mi
 
 export function shouldInstrumentProvider(
   wrapper: DiscoverableProvider,
-  options: ResolvedNodeScopeTracingOptions,
+  options: ResolvedNodeFlowTracingOptions,
 ): wrapper is DiscoverableProvider & { instance: object; metatype: Function } {
   if (!options.services || wrapper.isAlias || wrapper.subtype) return false;
   if (!wrapper.instance || typeof wrapper.instance !== 'object') return false;
@@ -52,7 +52,7 @@ export function shouldInstrumentProvider(
 
   const className = wrapper.metatype.name || wrapper.name || wrapper.instance.constructor.name;
   if (!className || className === 'Object') return false;
-  if (className.startsWith('NodeScope')) return false;
+  if (className.startsWith('NodeFlow')) return false;
   if (options.excludeProviders.has(className) || internalProviderNames.has(className)) return false;
   if (internalProviderSuffixes.some((suffix) => className.endsWith(suffix))) return false;
 

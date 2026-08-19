@@ -10,37 +10,35 @@ import {
 import { APP_INTERCEPTOR, DiscoveryModule } from '@nestjs/core';
 import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { catchError, defer, finalize, type Observable, throwError } from 'rxjs';
-import { NodeScopeProviderExplorer } from './provider-explorer.js';
+import { NodeFlowProviderExplorer } from './provider-explorer.js';
 import {
-  NODESCOPE_OPTIONS,
+  NODEFLOW_OPTIONS,
   resolveTracingOptions,
-  type NodeScopeModuleOptions,
-  type ResolvedNodeScopeTracingOptions,
+  type NodeFlowModuleOptions,
+  type ResolvedNodeFlowTracingOptions,
 } from './options.js';
 
 @Injectable()
-export class NodeScopeNestInterceptor implements NestInterceptor {
-  constructor(
-    @Inject(NODESCOPE_OPTIONS) private readonly options: ResolvedNodeScopeTracingOptions,
-  ) {}
+export class NodeFlowNestInterceptor implements NestInterceptor {
+  constructor(@Inject(NODEFLOW_OPTIONS) private readonly options: ResolvedNodeFlowTracingOptions) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     if (!this.options.controllers || context.getType() !== 'http') return next.handle();
     const controller = context.getClass().name;
     const method = context.getHandler().name;
-    const tracer = trace.getTracer('nodescope.nestjs.controllers');
+    const tracer = trace.getTracer('nodeflow.nestjs.controllers');
 
     return defer(() =>
       tracer.startActiveSpan(
         `${controller}.${method}`,
         {
           attributes: {
-            'nodescope.kind': 'controller',
-            'nodescope.framework': 'nestjs',
-            'nodescope.class': controller,
-            'nodescope.method': method,
-            'nodescope.identity': `controller:${controller}`,
-            'nodescope.min_duration_ms': this.options.minDurationMs,
+            'nodeflow.kind': 'controller',
+            'nodeflow.framework': 'nestjs',
+            'nodeflow.class': controller,
+            'nodeflow.method': method,
+            'nodeflow.identity': `controller:${controller}`,
+            'nodeflow.min_duration_ms': this.options.minDurationMs,
           },
         },
         (span) => {
@@ -67,7 +65,7 @@ export class NodeScopeNestInterceptor implements NestInterceptor {
 }
 
 const defaultOptionsProvider = {
-  provide: NODESCOPE_OPTIONS,
+  provide: NODEFLOW_OPTIONS,
   useValue: resolveTracingOptions(),
 };
 
@@ -75,15 +73,15 @@ const defaultOptionsProvider = {
   imports: [DiscoveryModule],
   providers: [
     defaultOptionsProvider,
-    NodeScopeProviderExplorer,
-    { provide: APP_INTERCEPTOR, useClass: NodeScopeNestInterceptor },
+    NodeFlowProviderExplorer,
+    { provide: APP_INTERCEPTOR, useClass: NodeFlowNestInterceptor },
   ],
 })
-export class NodeScopeModule {
-  static forRoot(options: NodeScopeModuleOptions = {}): DynamicModule {
+export class NodeFlowModule {
+  static forRoot(options: NodeFlowModuleOptions = {}): DynamicModule {
     return {
-      module: NodeScopeModule,
-      providers: [{ provide: NODESCOPE_OPTIONS, useValue: resolveTracingOptions(options) }],
+      module: NodeFlowModule,
+      providers: [{ provide: NODEFLOW_OPTIONS, useValue: resolveTracingOptions(options) }],
     };
   }
 }
@@ -93,10 +91,10 @@ export {
   instrumentProviderInstance,
   type InstanceInstrumentationResult,
 } from './method-instrumentation.js';
-export { NodeScopeProviderExplorer } from './provider-explorer.js';
+export { NodeFlowProviderExplorer } from './provider-explorer.js';
 export {
   resolveTracingOptions,
-  type NodeScopeModuleOptions,
-  type NodeScopeTracingOptions,
-  type ResolvedNodeScopeTracingOptions,
+  type NodeFlowModuleOptions,
+  type NodeFlowTracingOptions,
+  type ResolvedNodeFlowTracingOptions,
 } from './options.js';

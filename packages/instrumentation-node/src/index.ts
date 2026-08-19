@@ -1,1 +1,1 @@
-export { startNodeScopeInstrumentation } from './instrumentation.js';
+export { startNodeFlowInstrumentation } from './instrumentation.js';

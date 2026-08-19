@@ -15,16 +15,16 @@ import type {
   SpanBatch,
   TelemetrySpan,
   TelemetrySpanKind,
-} from '@nodescope/protocol';
+} from '@node-flow/protocol';
 
 let runningSdk: NodeSDK | undefined;
 
-export function startNodeScopeInstrumentation(): NodeSDK {
+export function startNodeFlowInstrumentation(): NodeSDK {
   if (runningSdk) return runningSdk;
 
-  const collectorUrl = process.env.NODESCOPE_COLLECTOR_URL ?? 'http://127.0.0.1:7331';
+  const collectorUrl = process.env.NODEFLOW_COLLECTOR_URL ?? 'http://127.0.0.1:7331';
   const serviceName =
-    process.env.NODESCOPE_SERVICE_NAME ?? process.env.npm_package_name ?? 'node-application';
+    process.env.NODEFLOW_SERVICE_NAME ?? process.env.npm_package_name ?? 'node-application';
   const exporter = new LocalCollectorExporter(collectorUrl, serviceName);
   const sdk = new NodeSDK({
     resource: resourceFromAttributes({ [ATTR_SERVICE_NAME]: serviceName }),
@@ -81,8 +81,8 @@ class LocalCollectorExporter implements SpanExporter {
         });
         callback({ code: response.ok ? ExportResultCode.SUCCESS : ExportResultCode.FAILED });
       } catch (error) {
-        if (process.env.NODESCOPE_DEBUG === '1')
-          console.error('[NodeScope] telemetry export failed:', error);
+        if (process.env.NODEFLOW_DEBUG === '1')
+          console.error('[NodeFlow] telemetry export failed:', error);
         callback({
           code: ExportResultCode.FAILED,
           error: error instanceof Error ? error : new Error(String(error)),
@@ -104,7 +104,7 @@ function normalizeSpan(span: ReadableSpan): TelemetrySpan {
   }
   const kind = resolveKind(span, attributes);
   const name = resolveName(span, kind, attributes);
-  attributes['nodescope.identity'] ??= resolveIdentity(kind, name, attributes);
+  attributes['nodeflow.identity'] ??= resolveIdentity(kind, name, attributes);
   return {
     traceId: span.spanContext().traceId,
     spanId: span.spanContext().spanId,
@@ -122,11 +122,11 @@ function resolveKind(
   span: ReadableSpan,
   attributes: Record<string, string | number | boolean>,
 ): TelemetrySpanKind {
-  const minimumDuration = attributes['nodescope.min_duration_ms'];
+  const minimumDuration = attributes['nodeflow.min_duration_ms'];
   const durationMs = span.duration[0] * 1_000 + span.duration[1] / 1_000_000;
   if (typeof minimumDuration === 'number' && durationMs < minimumDuration) return 'internal';
 
-  const explicit = attributes['nodescope.kind'] ?? attributes['nodescope.type'];
+  const explicit = attributes['nodeflow.kind'];
   if (typeof explicit === 'string') return explicit as TelemetrySpanKind;
   const dbSystem = attributes['db.system'] ?? attributes['db.system.name'];
   if (dbSystem === 'redis') return 'redis';

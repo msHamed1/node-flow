@@ -1,17 +1,22 @@
 {
-  "name": "@nodescope/topology-engine",
+  "name": "@node-flow/topology-engine",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": "./dist/index.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "rm -rf dist && tsc -p tsconfig.json",
     "lint": "tsc -p tsconfig.json --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@nodescope/protocol": "0.1.0"
+    "@node-flow/protocol": "0.1.0"
   }
 }

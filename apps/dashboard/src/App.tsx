@@ -38,7 +38,7 @@ import type {
   TopologyNodeType,
   TopologySnapshot,
   TraceSpan,
-} from '@nodescope/protocol';
+} from '@node-flow/protocol';
 
 const emptySnapshot: TopologySnapshot = {
   revision: 0,
@@ -101,7 +101,7 @@ export function App(): React.JSX.Element {
           <div className="brand-mark">
             <Network size={18} />
           </div>
-          <span>NodeScope</span>
+          <span>NodeFlow</span>
           <span className="version">LOCAL</span>
         </div>
         <div className={`connection ${connected ? 'online' : ''}`}>

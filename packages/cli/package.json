@@ -1,19 +1,48 @@
 {
-  "name": "nodescope",
+  "name": "@node-flow/node",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
-  "main": "./dist/index.js",
-  "bin": {
-    "nodescope": "./dist/index.js"
+  "engines": {
+    "node": ">=20"
   },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./nestjs": {
+      "types": "./dist/nestjs.d.ts",
+      "import": "./dist/nestjs.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "node-flow": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "dashboard"
+  ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "rm -rf dist dashboard && tsc -p tsconfig.json && chmod +x dist/cli.js && cp -R ../../apps/dashboard/dist dashboard",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist dashboard"
   },
   "dependencies": {
-    "@nodescope/collector": "0.1.0",
-    "@nodescope/instrumentation-node": "0.1.0"
+    "@node-flow/collector": "0.1.0",
+    "@node-flow/core": "0.1.0",
+    "@node-flow/instrumentation-nestjs": "0.1.0",
+    "@node-flow/instrumentation-node": "0.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/msHamed1/node-flow.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/msHamed1/node-flow#readme",
+  "publishConfig": {
+    "access": "public"
   }
 }

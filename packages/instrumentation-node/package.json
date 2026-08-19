@@ -1,8 +1,13 @@
 {
-  "name": "@nodescope/instrumentation-node",
+  "name": "@node-flow/instrumentation-node",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -10,12 +15,12 @@
     "./register": "./dist/register.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "rm -rf dist && tsc -p tsconfig.json",
     "lint": "tsc -p tsconfig.json --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@nodescope/protocol": "0.1.0",
+    "@node-flow/protocol": "0.1.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/auto-instrumentations-node": "^0.62.0",
     "@opentelemetry/core": "^2.0.1",

@@ -1,10 +1,9 @@
-# NodeScope
+# NodeFlow
 
-**See what your NestJS application actually does when a request runs.**
+**See how your Node.js application actually flows.**
 
-NodeScope is a local-first runtime architecture explorer for Node.js and NestJS applications. It captures real application traffic and displays the executed path as a live topology graph.
-
-For example, when a developer sends `POST /payments`, NodeScope can display:
+NodeFlow is a local-first runtime architecture explorer for Node.js and NestJS applications. It
+captures real application traffic and turns executed runtime paths into a live architecture map.
 
 ```text
 POST /payments
@@ -12,18 +11,22 @@ POST /payments
 PaymentsController
       ↓
 PaymentsService
-      ↓
-PostgreSQL
+     ↙              ↘
+Redis             PostgreSQL
+                       ↓
+                   RabbitMQ
 ```
 
-NodeScope is not a static dependency diagram. A component appears only after it executes. Repeated requests update the metrics on the same nodes and connections instead of creating duplicates.
+NodeFlow is not a static dependency diagram. Components appear only after they execute. Repeated
+requests update the metrics on the same nodes and connections instead of creating duplicates.
 
-> **No business-function wrappers required.** NestJS controllers and singleton application
-> providers are discovered and instrumented automatically during application bootstrap.
+> **No business-function wrappers required.** No NodeFlow decorators, initialization calls, manual
+> OpenTelemetry configuration, or tracing calls are required in normal controller and service
+> code.
 
-## What NodeScope helps you understand
+## What NodeFlow helps you understand
 
-NodeScope gives developers a visual answer to questions such as:
+NodeFlow gives developers a visual answer to questions such as:
 
 - Which controller and service handled this request?
 - Which databases, queues, caches, or external APIs were called?
@@ -44,114 +47,87 @@ The local dashboard includes:
 
 ## Local-first and private
 
-NodeScope is designed for local development.
+NodeFlow is designed for local development.
 
-- The collector listens on `127.0.0.1`.
+- The collector binds to `127.0.0.1`.
 - Telemetry remains on the developer's machine.
 - Runtime data is stored only in memory.
-- Restarting NodeScope clears the captured data.
-- NodeScope does not include analytics, cloud synchronization, accounts, API keys, or a remote collector.
+- Restarting NodeFlow clears the captured data.
+- There are no accounts, API keys, analytics, cloud synchronization, or remote collectors.
 
-Do not expose the NodeScope collector or dashboard to a public network.
+Do not expose the NodeFlow collector or dashboard to a public network.
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    App[NestJS application] --> Instrumentation[NodeScope + OpenTelemetry]
+    App[Node.js or NestJS application] --> Instrumentation[NodeFlow + OpenTelemetry]
     Instrumentation -->|localhost HTTP| Collector[Local collector]
     Collector --> Engine[Topology engine]
-    Engine -->|WebSocket| Dashboard[React dashboard]
+    Engine -->|WebSocket| Dashboard[NodeFlow dashboard]
 ```
 
-The NodeScope CLI starts the collector and dashboard, injects OpenTelemetry before the application starts, launches the normal development command, and forwards termination signals to the child process.
+The CLI starts the collector and bundled dashboard, configures the preload, and launches the
+developer's normal command. The preload initializes OpenTelemetry before application libraries are
+loaded. OpenTelemetry instruments supported infrastructure clients, while NodeFlow adds semantic
+controller and provider boundaries and aggregates completed traces into a runtime map.
 
 ## Release status
 
-NodeScope is currently an MVP source preview. The packages in this repository are marked `private` and have not yet been published to the npm registry.
+NodeFlow is currently an MVP source preview and has not yet been published to npm. The public
+package surface, transitive runtime packages, CLI binary, exports, and bundled dashboard are
+configured for publication under the `@node-flow` namespace.
 
-You can run the included demo from this repository today. The customer installation commands in
-the next section describe the intended npm package experience. Publishing the packages and bundling
-the dashboard assets for installed CLI usage remain release tasks.
-
-## Try the included demo
+## Install in a NestJS application
 
 Requirements:
 
 - Node.js 20 or newer
-- Yarn Classic 1.22
+- An existing NestJS application with `@nestjs/common`, `@nestjs/core`, and `rxjs`
 
-From this repository:
-
-```bash
-yarn install
-yarn demo
-```
-
-NodeScope starts:
-
-```text
-Demo application:  http://127.0.0.1:3000
-Runtime dashboard: http://127.0.0.1:7331
-```
-
-Open [http://127.0.0.1:7331](http://127.0.0.1:7331), then create a payment:
+Install one development dependency:
 
 ```bash
-curl -X POST http://127.0.0.1:3000/payments \
-  -H 'content-type: application/json' \
-  -d '{"amount":125,"currency":"USD"}'
+npm install -D @node-flow/node
 ```
-
-The dashboard will show:
-
-```text
-POST /payments → PaymentsController → PaymentsService → PostgreSQL
-```
-
-To verify error visualization:
-
-```bash
-curl -X POST http://127.0.0.1:3000/payments \
-  -H 'content-type: application/json' \
-  -d '{"fail":true}'
-```
-
-## Install in a NestJS application
-
-> The following installation commands apply after the NodeScope packages are published to npm.
-
-Install the CLI and NestJS integration as development dependencies:
-
-```bash
-yarn add --dev nodescope @nodescope/instrumentation-nestjs
-```
-
-NodeScope expects an existing NestJS application with `@nestjs/common`, `@nestjs/core`, and `rxjs` installed.
 
 ### 1. Register the NestJS integration
 
-Import `NodeScopeModule` once in the root application module:
+Import `NodeFlowModule` once in the root application module:
 
 ```ts
 import { Module } from '@nestjs/common';
-import { NodeScopeModule } from '@nodescope/instrumentation-nestjs';
+import { NodeFlowModule } from '@node-flow/node/nestjs';
 import { PaymentsModule } from './payments/payments.module';
 
 @Module({
-  imports: [NodeScopeModule, PaymentsModule],
+  imports: [NodeFlowModule, PaymentsModule],
 })
 export class AppModule {}
 ```
 
-The module installs one global controller interceptor and discovers eligible application providers
-once during bootstrap. You do not need to add NodeScope decorators to controllers, routes, or
-services.
+This is the only required application-source integration. The module installs one global
+controller interceptor and discovers eligible singleton application providers once during
+bootstrap.
+
+### Why the NestJS module is still required
+
+NodeFlow intentionally does not fake zero configuration by patching undocumented NestJS internals.
+`NodeFlowModule` uses stable framework extension points:
+
+- The public `DiscoveryModule` registers the public `DiscoveryService` in the application DI graph.
+- Provider discovery runs once through the public `OnApplicationBootstrap` lifecycle.
+- Controller visibility is registered through the public `APP_INTERCEPTOR` token.
+
+A Node preload can activate NestJS request instrumentation, but NestJS does not expose a public
+global observer that provides the completed application container and provider instances. Removing
+the module today would require wrapping `NestFactory.create` and depending on internal container and
+instance-wrapper behavior. Reliability across NestJS releases is more important than hiding one
+explicit module import.
 
 ### 2. Keep normal business code
 
-NodeScope safely wraps eligible singleton provider prototype methods after NestJS creates them. The
-service remains normal application code:
+Services remain normal NestJS code:
 
 ```ts
 import { Injectable } from '@nestjs/common';
@@ -166,11 +142,11 @@ export class PaymentsService {
 }
 ```
 
-Calling `PaymentsService.createPayment()` creates a semantic service span automatically. If that
-method calls `WalletService.withdraw()`, their parent/child relationship is preserved through the
-OpenTelemetry async context.
+NodeFlow safely instruments eligible singleton provider prototype methods after NestJS creates
+their instances. Nested provider calls preserve their parent-child relationship through the active
+OpenTelemetry context.
 
-The main topology aggregates all methods under the provider class:
+The topology aggregates provider methods under one stable class node:
 
 ```text
 PaymentsService.createPayment
@@ -178,11 +154,11 @@ PaymentsService.validatePayment   → topology node: PaymentsService
 PaymentsService.calculateFees
 ```
 
-The trace explorer retains each executed method name and duration.
+Individual traces retain the executed method names and durations.
 
-### 3. Use your database normally
+### 3. Use infrastructure clients normally
 
-Compatible PostgreSQL clients are captured by OpenTelemetry. No NodeScope-specific database call is required:
+Compatible clients are captured by OpenTelemetry. No NodeFlow-specific database call is required:
 
 ```ts
 return this.dataSource.query(
@@ -191,41 +167,27 @@ return this.dataSource.query(
 );
 ```
 
-### 4. Start the application through NodeScope
+### 4. Run through NodeFlow
 
-Run the same command you normally use for local development:
-
-```bash
-yarn nodescope dev -- yarn start:dev
-```
-
-The CLI automatically injects the NodeScope OpenTelemetry preload through `NODE_OPTIONS`. The
-developer does not need to export it manually.
-
-You can also add a reusable script to the NestJS application's `package.json`:
-
-```json
-{
-  "scripts": {
-    "start:dev": "nest start --watch",
-    "start:scope": "nodescope dev -- yarn start:dev"
-  }
-}
-```
-
-Then run:
+Use the npm package directly:
 
 ```bash
-yarn start:scope
+npx @node-flow/node dev -- npm run start:dev
 ```
 
-NodeScope prints the dashboard address:
+After local installation, the shorter binary is also available:
+
+```bash
+node-flow dev -- npm run start:dev
+```
+
+The CLI prints:
 
 ```text
-NodeScope started
+NodeFlow started
 
 Application command:
-yarn start:dev
+npm run start:dev
 
 Runtime map:
 http://127.0.0.1:7331
@@ -233,41 +195,31 @@ http://127.0.0.1:7331
 Press Ctrl+C to stop.
 ```
 
-### 5. Generate application traffic
+The CLI resolves the installed NodeFlow preload, preserves existing `NODE_OPTIONS`, avoids duplicate
+preload entries, and launches the application with `NODEFLOW_COLLECTOR_URL`. Developers do not need
+to configure `NODE_OPTIONS` themselves.
 
-Use the application normally, run an integration test, or send a request with `curl`. Only executed components appear in the dashboard.
-
-The first request should produce a path similar to:
-
-```text
-HTTP route → Controller → Service → Database
-```
-
-Press `Ctrl+C` in the NodeScope terminal to stop both the application and local collector.
+Open [http://127.0.0.1:7331](http://127.0.0.1:7331), then use the application normally or generate
+traffic with integration tests and `curl`. Only executed components appear.
 
 ## Optional custom spans
 
-Automatic instrumentation covers normal controller and provider visibility. Install
-`@nodescope/core` only when a custom domain operation or unsupported infrastructure boundary needs
-extra trace detail:
+Automatic instrumentation covers normal controllers, singleton providers, and supported
+infrastructure clients. The public package also exposes optional APIs for domain-specific detail or
+unsupported clients.
 
-```bash
-yarn add --dev @nodescope/core
-```
-
-Use `nodescope.span()` for trace detail that should not become a main topology node:
+Use `nodeflow.span()` for trace detail that should not become a main topology node:
 
 ```ts
-import { nodescope } from '@nodescope/core';
+import { nodeflow } from '@node-flow/node';
 
-return nodescope.span('calculate-settlement', () => this.calculateSettlement(input));
+return nodeflow.span('calculate-settlement', () => this.calculateSettlement(input));
 ```
 
-If an internal library or unsupported client is not automatically visible, mark its architectural
-boundary explicitly:
+Use `traceBoundary()` only when an unsupported client needs an explicit architectural boundary:
 
 ```ts
-import { traceBoundary } from '@nodescope/core';
+import { traceBoundary } from '@node-flow/node';
 
 return traceBoundary(
   {
@@ -280,53 +232,49 @@ return traceBoundary(
 );
 ```
 
-The `identity` must remain stable. Do not include payment IDs, player IDs, timestamps, or other request-specific values.
+Keep `identity` stable. Do not include payment IDs, player IDs, timestamps, or other
+request-specific values.
 
 ## What is captured
 
-| Boundary                        | Behavior                                                         |
-| ------------------------------- | ---------------------------------------------------------------- |
-| Incoming HTTP                   | Captured automatically when the app starts through NodeScope     |
-| NestJS controllers              | Captured after importing `NodeScopeModule`                       |
-| NestJS singleton providers      | Discovered and instrumented automatically during bootstrap       |
-| PostgreSQL                      | Captured through compatible OpenTelemetry client instrumentation |
-| MongoDB                         | Captured when a compatible instrumented client is used           |
-| Redis                           | Captured when a compatible instrumented client is used           |
-| RabbitMQ/AMQP                   | Captured when a compatible `amqplib` integration is used         |
-| Outgoing HTTP and `fetch`       | Captured automatically where supported                           |
-| Custom trace detail             | Optionally use `nodescope.span()`                                |
-| Custom architectural boundaries | Optionally use `traceBoundary`                                   |
+| Boundary                        | Behavior                                                      |
+| ------------------------------- | ------------------------------------------------------------- |
+| Incoming HTTP                   | Captured automatically when the app starts through NodeFlow   |
+| NestJS controllers              | Captured after importing `NodeFlowModule`                     |
+| NestJS singleton providers      | Discovered and instrumented once during application bootstrap |
+| PostgreSQL                      | Captured through compatible OpenTelemetry instrumentation     |
+| MongoDB                         | Captured when a compatible instrumented client is used        |
+| Redis                           | Captured when a compatible instrumented client is used        |
+| RabbitMQ/AMQP                   | Captured when compatible `amqplib` instrumentation is used    |
+| Outgoing HTTP and `fetch`       | Captured automatically where supported                        |
+| Custom trace detail             | Optionally use `nodeflow.span()`                              |
+| Custom architectural boundaries | Optionally use `traceBoundary()`                              |
 
-NodeScope instruments architectural boundaries. It does not trace every JavaScript function.
+NodeFlow instruments architectural boundaries. It does not trace every JavaScript function.
 
-## Dashboard metrics
+## Dashboard metrics and storage
 
-Each topology node and edge maintains:
+Each topology node and edge maintains request count, error count, error rate, average latency, and
+p95 latency. Recent traces are stored separately from the aggregated graph so developers can inspect
+individual requests without creating duplicate topology nodes.
 
-- Request count
-- Error count
-- Error rate
-- Average latency
-- p95 latency
-
-Recent traces are stored separately from the aggregated graph so a developer can inspect one request without creating duplicate topology nodes.
-
-Storage is intentionally bounded:
+Storage is intentionally bounded and process-local:
 
 - Up to 50 recent traces by default
 - Up to 1,000 latency samples per node or edge
-- No NodeScope database or persistent telemetry storage
+- No NodeFlow database or persistent telemetry storage
 
-## Configuration
+## Optional configuration
 
-NodeScope works without configuration for the standard local setup.
-
-Optional NestJS filtering is available through `forRoot()`:
+NodeFlow works without configuration for the standard local setup. Filtering is available through
+`forRoot()`:
 
 ```ts
+import { NodeFlowModule } from '@node-flow/node/nestjs';
+
 @Module({
   imports: [
-    NodeScopeModule.forRoot({
+    NodeFlowModule.forRoot({
       tracing: {
         services: true,
         controllers: true,
@@ -339,24 +287,56 @@ Optional NestJS filtering is available through `forRoot()`:
 export class AppModule {}
 ```
 
-`excludeProviders` accepts exact class names. `minDurationMs` keeps faster method spans as internal
-correlation spans so trivial methods do not clutter the topology or trace explorer.
+`excludeProviders` accepts exact class names. `minDurationMs` keeps faster provider method spans as
+internal correlation spans. If a standalone configuration file is added later, the preferred
+filename is `nodeflow.config.ts`.
 
-| Environment variable     | Default                  | Purpose                                     |
-| ------------------------ | ------------------------ | ------------------------------------------- |
-| `NODESCOPE_PORT`         | `7331`                   | Collector and dashboard port                |
-| `NODESCOPE_SERVICE_NAME` | Application package name | Name reported by the instrumented process   |
-| `NODESCOPE_DEBUG`        | Disabled                 | Set to `1` to log telemetry export failures |
+## Environment variables
+
+| Environment variable    | Default                  | Purpose                                     |
+| ----------------------- | ------------------------ | ------------------------------------------- |
+| `NODEFLOW_PORT`         | `7331`                   | Collector and dashboard port                |
+| `NODEFLOW_SERVICE_NAME` | Application package name | Name reported by the instrumented process   |
+| `NODEFLOW_DEBUG`        | Disabled                 | Set to `1` to log telemetry export failures |
 
 Example:
 
 ```bash
-NODESCOPE_PORT=7441 \
-NODESCOPE_SERVICE_NAME=payments-api \
-yarn nodescope dev -- yarn start:dev
+NODEFLOW_PORT=7441 \
+NODEFLOW_SERVICE_NAME=payments-api \
+node-flow dev -- npm run start:dev
 ```
 
 The dashboard will be available at `http://127.0.0.1:7441`.
+
+## Try the included demo
+
+Repository development uses Yarn Classic 1.22:
+
+```bash
+yarn install
+yarn demo
+```
+
+NodeFlow starts the demo on `http://127.0.0.1:3000` and the runtime map on
+`http://127.0.0.1:7331`.
+
+Create a payment:
+
+```bash
+curl -X POST http://127.0.0.1:3000/payments \
+  -H 'content-type: application/json' \
+  -d '{"amount":125,"currency":"USD"}'
+```
+
+The dashboard will show:
+
+```text
+POST /payments → PaymentsController → PaymentsService → PostgreSQL
+```
+
+The demo simulates PostgreSQL through optional `traceBoundary()` so Docker is not required. Its
+controller and service contain no tracing calls.
 
 ## Troubleshooting
 
@@ -364,57 +344,48 @@ The dashboard will be available at `http://127.0.0.1:7441`.
 
 Confirm that:
 
-1. The application was started through `nodescope dev`.
-2. A real request was sent after NodeScope started.
-3. `NodeScopeModule` is imported by the root NestJS module.
+1. The application was started through `node-flow dev`.
+2. A real request was sent after NodeFlow started.
+3. `NodeFlowModule` from `@node-flow/node/nestjs` is imported by the root NestJS module.
 4. The application process can reach `127.0.0.1:7331`.
-
-Routes only appear after they execute.
 
 ### Routes and controllers appear, but services do not
 
-Confirm that the provider is a singleton class with methods declared on its direct prototype.
-Request-scoped providers, transient providers, inherited methods, accessors, and arrow functions
-assigned as instance properties are intentionally skipped in the MVP. You can use an optional
-custom span for an unsupported case.
+The provider must be a singleton class with methods declared on its direct prototype. Request and
+transient scopes, inherited methods, accessors, lifecycle hooks, and arrow functions stored as
+instance properties are intentionally skipped to protect application behavior.
 
 ### The database does not appear
 
-Check whether the application uses a client supported by the OpenTelemetry Node auto-instrumentations. If the database is hidden behind a custom wrapper or unsupported client, use `traceBoundary` around the architectural database operation.
+Check whether the client is supported by OpenTelemetry Node auto-instrumentation. Use
+`traceBoundary()` only for an unsupported or custom client.
 
 ### Port 7331 is already in use
 
-Choose another local port:
-
 ```bash
-NODESCOPE_PORT=7441 yarn nodescope dev -- yarn start:dev
+NODEFLOW_PORT=7441 node-flow dev -- npm run start:dev
 ```
 
 ### No telemetry arrives
 
-Run with debug logging:
-
 ```bash
-NODESCOPE_DEBUG=1 yarn nodescope dev -- yarn start:dev
+NODEFLOW_DEBUG=1 node-flow dev -- npm run start:dev
 ```
 
 ## Current MVP limitations
 
-- The npm packages are not published yet.
-- State is process-local and is cleared on restart.
-- Automatic provider discovery currently instruments singleton class providers created during bootstrap.
-- Request-scoped and transient providers are skipped to avoid unsafe instance mutation.
-- Inherited methods and arrow functions stored as instance properties are not automatically wrapped.
-- Getters, setters, lifecycle hooks, framework providers, and NodeScope providers are intentionally skipped.
-- Providers dynamically created after application bootstrap are not discovered in the MVP.
-- The included demo simulates a PostgreSQL operation so Docker is not required.
-- One local application process and one collector are assumed.
-- MongoDB, Redis, RabbitMQ, and external HTTP naming still need broader compatibility testing.
-- Filtering, persistence, authentication, remote access, Kubernetes integration, and production deployment are not implemented.
+- The npm packages are configured but not yet published.
+- One `NodeFlowModule` import remains required because NestJS has no public preload-to-container
+  discovery hook.
+- State is process-local and cleared on restart.
+- Automatic provider discovery covers singleton class providers created during bootstrap.
+- Request-scoped, transient, and dynamically created providers are intentionally skipped.
+- Inherited methods, instance arrow functions, accessors, lifecycle hooks, framework providers, and
+  NodeFlow providers are skipped.
+- One local application process and collector are assumed.
+- MongoDB, Redis, RabbitMQ, and external HTTP naming need broader compatibility testing.
 
 ## Repository development
-
-Install dependencies and validate the workspace with Yarn:
 
 ```bash
 yarn install
@@ -425,29 +396,12 @@ yarn lint
 yarn test
 ```
 
-`yarn format` applies the shared Prettier rules to the entire workspace, while
-`yarn format:check` verifies formatting without changing files. The test suite covers stable
-topology aggregation, latency and p95 calculations, error metrics, out-of-order trace correlation,
-bounded trace retention, and collector ingestion.
+The repository is prepared for `github.com/msHamed1/node-flow`.
 
-## Roadmap
+## Product scope
 
-### v0.2
+NodeFlow will remain local-first. Cloud accounts, remote telemetry, SaaS features, authentication,
+and production monitoring are outside the current product scope.
 
-- Validate more PostgreSQL, MongoDB, Redis, and RabbitMQ client versions
-- Improve external HTTP destination naming
-- Simplify package publication and customer installation
-
-### v0.3
-
-- Route and dependency filtering
-- A richer trace explorer
-- p50, p95, and p99 latency
-- Improved request animations
-
-### v0.4
-
-- Multiple Node.js processes
-- Service and process grouping
-
-NodeScope will remain local-first. Cloud accounts, remote telemetry, and SaaS features are outside the current product scope.
+The next SDK ergonomics improvement is optional `nodeflow.config.ts` loading through the CLI so
+filtering does not require `NodeFlowModule.forRoot()`.

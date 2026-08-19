@@ -1,5 +1,5 @@
 {
-  "name": "nodescope-workspace",
+  "name": "node-flow-workspace",
   "version": "0.1.0",
   "private": true,
   "packageManager": "yarn@1.22.22",
@@ -8,15 +8,20 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "yarn workspace @nodescope/protocol build && yarn workspace @nodescope/topology-engine build && yarn workspace @nodescope/core build && yarn workspace @nodescope/instrumentation-node build && yarn workspace @nodescope/instrumentation-nestjs build && yarn workspace @nodescope/dashboard build && yarn workspace @nodescope/collector build && yarn workspace nodescope build && yarn workspace @nodescope/demo-nestjs build",
+    "build": "yarn workspace @node-flow/protocol build && yarn workspace @node-flow/topology-engine build && yarn workspace @node-flow/core build && yarn workspace @node-flow/instrumentation-node build && yarn workspace @node-flow/instrumentation-nestjs build && yarn workspace @node-flow/dashboard build && yarn workspace @node-flow/collector build && yarn workspace @node-flow/node build && yarn workspace @node-flow/demo-nestjs build",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "yarn workspaces run lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "demo": "yarn build && node packages/cli/dist/index.js dev -- node apps/demo-nestjs/dist/main.js",
+    "demo": "yarn build && node packages/cli/dist/cli.js dev -- node apps/demo-nestjs/dist/main.js",
     "clean": "yarn workspaces run clean"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/msHamed1/node-flow.git"
+  },
+  "homepage": "https://github.com/msHamed1/node-flow#readme",
   "devDependencies": {
     "@types/node": "^22.15.0",
     "prettier": "^3.6.2",

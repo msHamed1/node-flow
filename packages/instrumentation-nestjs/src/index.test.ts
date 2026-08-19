@@ -12,8 +12,8 @@ import { lastValueFrom, of } from 'rxjs';
 import { shouldInstrumentProvider } from './filter.js';
 import { instrumentProviderInstance } from './method-instrumentation.js';
 import { resolveTracingOptions } from './options.js';
-import { NodeScopeProviderExplorer } from './provider-explorer.js';
-import { NodeScopeNestInterceptor } from './index.js';
+import { NodeFlowProviderExplorer } from './provider-explorer.js';
+import { NodeFlowNestInterceptor } from './index.js';
 
 let exporter: InMemorySpanExporter;
 let provider: BasicTracerProvider;
@@ -50,7 +50,7 @@ describe('automatic NestJS provider instrumentation', () => {
       getControllers: vi.fn(() => []),
       getProviders: vi.fn(() => [providerWrapper(service, PaymentsService)]),
     };
-    const explorer = new NodeScopeProviderExplorer(
+    const explorer = new NodeFlowProviderExplorer(
       discoveryService as never,
       resolveTracingOptions(),
     );
@@ -66,10 +66,10 @@ describe('automatic NestJS provider instrumentation', () => {
     expect(finishedSpans()[0]).toMatchObject({
       name: 'PaymentsService.processPayment',
       attributes: {
-        'nodescope.kind': 'service',
-        'nodescope.framework': 'nestjs',
-        'nodescope.class': 'PaymentsService',
-        'nodescope.method': 'processPayment',
+        'nodeflow.kind': 'service',
+        'nodeflow.framework': 'nestjs',
+        'nodeflow.class': 'PaymentsService',
+        'nodeflow.method': 'processPayment',
       },
     });
   });
@@ -239,7 +239,7 @@ describe('automatic NestJS provider instrumentation', () => {
       }
     }
 
-    const interceptor = new NodeScopeNestInterceptor(resolveTracingOptions());
+    const interceptor = new NodeFlowNestInterceptor(resolveTracingOptions());
     const executionContext = {
       getType: () => 'http',
       getClass: () => PaymentsController,
@@ -255,9 +255,9 @@ describe('automatic NestJS provider instrumentation', () => {
     expect(finishedSpans()[0]).toMatchObject({
       name: 'PaymentsController.create',
       attributes: {
-        'nodescope.kind': 'controller',
-        'nodescope.class': 'PaymentsController',
-        'nodescope.method': 'create',
+        'nodeflow.kind': 'controller',
+        'nodeflow.class': 'PaymentsController',
+        'nodeflow.method': 'create',
       },
     });
   });

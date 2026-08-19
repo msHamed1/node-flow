@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { startCollector } from './index.js';
 
-const port = Number.parseInt(process.env.NODESCOPE_PORT ?? '7331', 10);
+const port = Number.parseInt(process.env.NODEFLOW_PORT ?? '7331', 10);
 const collector = await startCollector({ port });
-console.log(`NodeScope collector: ${collector.url}`);
+console.log(`NodeFlow collector: ${collector.url}`);
 
 const stop = async (): Promise<void> => {
   await collector.close();

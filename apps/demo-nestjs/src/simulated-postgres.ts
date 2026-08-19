@@ -1,4 +1,4 @@
-import { traceBoundary } from '@nodescope/core';
+import { traceBoundary } from '@node-flow/node';
 
 export interface CreatePaymentInput {
   amount?: number;

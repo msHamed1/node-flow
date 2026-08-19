@@ -9,8 +9,8 @@ import {
   type RuntimeMetrics,
   type SpanBatch,
   type TopologySnapshot,
-} from '@nodescope/protocol';
-import { TopologyEngine } from '@nodescope/topology-engine';
+} from '@node-flow/protocol';
+import { TopologyEngine } from '@node-flow/topology-engine';
 
 export interface CollectorOptions {
   host?: string;
@@ -76,7 +76,7 @@ export async function startCollector(options: CollectorOptions = {}): Promise<Ru
     response.status(202).end();
   });
 
-  const dashboardDirectory = options.dashboardDirectory ?? process.env.NODESCOPE_DASHBOARD_DIR;
+  const dashboardDirectory = options.dashboardDirectory ?? process.env.NODEFLOW_DASHBOARD_DIR;
   if (dashboardDirectory && existsSync(dashboardDirectory)) {
     app.use(express.static(dashboardDirectory));
     app.get('*path', (_request, response) =>
@@ -86,7 +86,7 @@ export async function startCollector(options: CollectorOptions = {}): Promise<Ru
     app.get('/', (_request, response) => {
       response
         .type('text')
-        .send('NodeScope collector is running. Build the dashboard to enable the UI.');
+        .send('NodeFlow collector is running. Build the dashboard to enable the UI.');
     });
   }
 

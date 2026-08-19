@@ -1,5 +1,5 @@
 import { SpanStatusCode, trace, type Attributes } from '@opentelemetry/api';
-import type { TopologyNodeType } from '@nodescope/protocol';
+import type { TopologyNodeType } from '@node-flow/protocol';
 
 export interface BoundaryOptions {
   type: TopologyNodeType;
@@ -9,7 +9,7 @@ export interface BoundaryOptions {
   attributes?: Attributes;
 }
 
-const tracer = trace.getTracer('nodescope.boundaries');
+const tracer = trace.getTracer('nodeflow.boundaries');
 
 /** Instrument an architectural boundary that auto-instrumentation cannot see. */
 export async function traceBoundary<T>(
@@ -20,9 +20,9 @@ export async function traceBoundary<T>(
     options.name,
     {
       attributes: {
-        'nodescope.kind': options.type,
-        'nodescope.identity': options.identity ?? `${options.type}:${options.name}`,
-        ...(options.operation ? { 'nodescope.operation': options.operation } : {}),
+        'nodeflow.kind': options.type,
+        'nodeflow.identity': options.identity ?? `${options.type}:${options.name}`,
+        ...(options.operation ? { 'nodeflow.operation': options.operation } : {}),
         ...options.attributes,
       },
     },
@@ -51,8 +51,8 @@ export async function span<T>(name: string, work: () => Promise<T> | T): Promise
     name,
     {
       attributes: {
-        'nodescope.kind': 'custom',
-        'nodescope.framework': 'custom',
+        'nodeflow.kind': 'custom',
+        'nodeflow.framework': 'custom',
       },
     },
     async (activeSpan) => {
@@ -74,7 +74,7 @@ export async function span<T>(name: string, work: () => Promise<T> | T): Promise
   );
 }
 
-export const nodescope = { span } as const;
+export const nodeflow = { span } as const;
 
 /**
  * @deprecated NestJS providers are discovered and instrumented automatically.

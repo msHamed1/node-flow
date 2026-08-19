@@ -1,3 +1,3 @@
-import { startNodeScopeInstrumentation } from './instrumentation.js';
+import { startNodeFlowInstrumentation } from './instrumentation.js';
 
-startNodeScopeInstrumentation();
+startNodeFlowInstrumentation();

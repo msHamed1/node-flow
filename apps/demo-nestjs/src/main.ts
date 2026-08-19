@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { Body, Controller, Inject, Injectable, Module, Post } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { NodeScopeModule } from '@nodescope/instrumentation-nestjs';
+import { NodeFlowModule } from '@node-flow/node/nestjs';
 import {
   PAYMENTS_DATABASE,
   simulatedPostgresProvider,
@@ -30,7 +30,7 @@ class PaymentsController {
 }
 
 @Module({
-  imports: [NodeScopeModule],
+  imports: [NodeFlowModule],
   controllers: [PaymentsController],
   providers: [PaymentsService, simulatedPostgresProvider],
 })

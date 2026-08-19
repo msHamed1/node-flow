@@ -1,8 +1,8 @@
 import { SpanStatusCode, trace, type Span } from '@opentelemetry/api';
 import { isLifecycleMethod } from './filter.js';
-import type { ResolvedNodeScopeTracingOptions } from './options.js';
+import type { ResolvedNodeFlowTracingOptions } from './options.js';
 
-const wrappedMethod = Symbol.for('nodescope.nestjs.wrapped-method');
+const wrappedMethod = Symbol.for('nodeflow.nestjs.wrapped-method');
 const instrumentedInstances = new WeakSet<object>();
 
 type InstrumentedFunction = ((...args: unknown[]) => unknown) & {
@@ -17,7 +17,7 @@ export interface InstanceInstrumentationResult {
 export function instrumentProviderInstance(
   instance: object,
   className: string,
-  options: ResolvedNodeScopeTracingOptions,
+  options: ResolvedNodeFlowTracingOptions,
 ): InstanceInstrumentationResult {
   if (instrumentedInstances.has(instance)) return { className, methods: [] };
 
@@ -51,20 +51,20 @@ function createInstrumentedMethod(
   original: InstrumentedFunction,
   className: string,
   methodName: string,
-  options: ResolvedNodeScopeTracingOptions,
+  options: ResolvedNodeFlowTracingOptions,
 ): InstrumentedFunction {
-  const tracer = trace.getTracer('nodescope.nestjs.providers');
+  const tracer = trace.getTracer('nodeflow.nestjs.providers');
   const instrumented: InstrumentedFunction = function (this: unknown, ...args: unknown[]): unknown {
     return tracer.startActiveSpan(
       `${className}.${methodName}`,
       {
         attributes: {
-          'nodescope.kind': 'service',
-          'nodescope.framework': 'nestjs',
-          'nodescope.class': className,
-          'nodescope.method': methodName,
-          'nodescope.identity': `service:${className}`,
-          'nodescope.min_duration_ms': options.minDurationMs,
+          'nodeflow.kind': 'service',
+          'nodeflow.framework': 'nestjs',
+          'nodeflow.class': className,
+          'nodeflow.method': methodName,
+          'nodeflow.identity': `service:${className}`,
+          'nodeflow.min_duration_ms': options.minDurationMs,
         },
       },
       (span) => executeWithSpan(original, this, args, span),

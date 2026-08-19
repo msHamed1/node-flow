@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { TelemetrySpan } from '@nodescope/protocol';
+import type { TelemetrySpan } from '@node-flow/protocol';
 import { percentile, TopologyEngine } from './index.js';
 
 describe('TopologyEngine', () => {
@@ -129,9 +129,9 @@ function providerSpan(traceId: string, method: string, seed: number): TelemetryS
     durationMs: seed,
     status: 'ok',
     attributes: {
-      'nodescope.identity': 'service:PaymentsService',
-      'nodescope.class': 'PaymentsService',
-      'nodescope.method': method,
+      'nodeflow.identity': 'service:PaymentsService',
+      'nodeflow.class': 'PaymentsService',
+      'nodeflow.method': method,
     },
   };
 }

@@ -5,15 +5,15 @@ import {
   instrumentProviderInstance,
   type InstanceInstrumentationResult,
 } from './method-instrumentation.js';
-import { NODESCOPE_OPTIONS, type ResolvedNodeScopeTracingOptions } from './options.js';
+import { NODEFLOW_OPTIONS, type ResolvedNodeFlowTracingOptions } from './options.js';
 
 @Injectable()
-export class NodeScopeProviderExplorer implements OnApplicationBootstrap {
+export class NodeFlowProviderExplorer implements OnApplicationBootstrap {
   private results: InstanceInstrumentationResult[] = [];
 
   constructor(
     private readonly discoveryService: DiscoveryService,
-    @Inject(NODESCOPE_OPTIONS) private readonly options: ResolvedNodeScopeTracingOptions,
+    @Inject(NODEFLOW_OPTIONS) private readonly options: ResolvedNodeFlowTracingOptions,
   ) {}
 
   onApplicationBootstrap(): void {

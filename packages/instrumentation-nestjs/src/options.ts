@@ -1,4 +1,4 @@
-export interface NodeScopeTracingOptions {
+export interface NodeFlowTracingOptions {
   /** Automatically instrument singleton application providers. */
   services?: boolean;
   /** Create one semantic span for each executed controller route handler. */
@@ -9,22 +9,22 @@ export interface NodeScopeTracingOptions {
   minDurationMs?: number;
 }
 
-export interface NodeScopeModuleOptions {
-  tracing?: NodeScopeTracingOptions;
+export interface NodeFlowModuleOptions {
+  tracing?: NodeFlowTracingOptions;
 }
 
-export interface ResolvedNodeScopeTracingOptions {
+export interface ResolvedNodeFlowTracingOptions {
   services: boolean;
   controllers: boolean;
   excludeProviders: ReadonlySet<string>;
   minDurationMs: number;
 }
 
-export const NODESCOPE_OPTIONS = Symbol('NODESCOPE_OPTIONS');
+export const NODEFLOW_OPTIONS = Symbol('NODEFLOW_OPTIONS');
 
 export function resolveTracingOptions(
-  options: NodeScopeModuleOptions = {},
-): ResolvedNodeScopeTracingOptions {
+  options: NodeFlowModuleOptions = {},
+): ResolvedNodeFlowTracingOptions {
   return {
     services: options.tracing?.services ?? true,
     controllers: options.tracing?.controllers ?? true,
