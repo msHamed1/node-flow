@@ -63,6 +63,9 @@ yarn lint
 yarn test
 yarn package:check
 yarn package:smoke
+yarn integration:up
+yarn integration:test
+yarn integration:down
 yarn release:check
 ```
 
@@ -148,8 +151,9 @@ Repository settings must also allow GitHub Actions to create and approve pull re
    and maintains package changelogs in that pull request.
 4. A maintainer reviews the version plan, changelogs, CI result, and npm payload report, then merges
    the release pull request.
-5. The next `main` run executes `yarn release`. Changesets publishes only unpublished versions using
-   npm's GitHub OIDC identity.
+5. The next `main` run rebuilds the real Docker integration lab and requires its topology, trace,
+   and failure assertions to pass before executing `yarn release`. Changesets publishes only
+   unpublished versions using npm's GitHub OIDC identity.
 6. The Changesets action creates Git tags and GitHub Releases for successfully published versions.
 
 Do not manually edit versions or delete Changeset files to force a release.

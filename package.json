@@ -8,7 +8,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "yarn workspace @mshamed1/node-flow-protocol build && yarn workspace @mshamed1/node-flow-topology-engine build && yarn workspace @mshamed1/node-flow-core build && yarn workspace @mshamed1/node-flow-instrumentation-node build && yarn workspace @mshamed1/node-flow-instrumentation-nestjs build && yarn workspace @mshamed1/node-flow-dashboard build && yarn workspace @mshamed1/node-flow-collector build && yarn workspace @mshamed1/node-flow build && yarn workspace @mshamed1/node-flow-demo-nestjs build",
+    "build": "yarn workspace @mshamed1/node-flow-protocol build && yarn workspace @mshamed1/node-flow-integration-contracts build && yarn workspace @mshamed1/node-flow-topology-engine build && yarn workspace @mshamed1/node-flow-core build && yarn workspace @mshamed1/node-flow-instrumentation-node build && yarn workspace @mshamed1/node-flow-instrumentation-nestjs build && yarn workspace @mshamed1/node-flow-dashboard build && yarn workspace @mshamed1/node-flow-collector build && yarn workspace @mshamed1/node-flow build && yarn workspace @mshamed1/node-flow-demo-nestjs build && yarn workspace @mshamed1/node-flow-mock-risk-service build && yarn workspace @mshamed1/node-flow-integration-api build && yarn workspace @mshamed1/node-flow-integration-worker build",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "yarn workspaces run lint",
@@ -22,7 +22,12 @@
     "release:check": "node scripts/check-release-readiness.mjs",
     "scope:check": "node scripts/check-scope-migration.mjs",
     "package:check": "node scripts/check-packages.mjs",
-    "package:smoke": "node scripts/smoke-packed-package.mjs"
+    "package:smoke": "node scripts/smoke-packed-package.mjs",
+    "integration:up": "docker compose up -d --build --wait --wait-timeout 240",
+    "integration:down": "docker compose down -v --remove-orphans",
+    "integration:test": "node scripts/integration-test.mjs",
+    "integration:logs": "docker compose logs -f nodeflow integration-api integration-worker mock-risk-service",
+    "integration": "yarn integration:up && yarn integration:test"
   },
   "repository": {
     "type": "git",

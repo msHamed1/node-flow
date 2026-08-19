@@ -70,6 +70,23 @@ describe('TopologyEngine', () => {
     ]);
   });
 
+  it('collapses layered Mongoose and MongoDB spans into one architecture node', () => {
+    const engine = new TopologyEngine();
+    engine.ingest([
+      databaseOperationSpan('mongoose', 'mongoose.PaymentAudit.save'),
+      databaseOperationSpan('mongodb', 'mongodb.insert'),
+    ]);
+
+    const snapshot = engine.snapshot();
+    expect(snapshot.nodes.filter((node) => node.type === 'database')).toEqual([
+      expect.objectContaining({ name: 'MongoDB', requestCount: 2 }),
+    ]);
+    expect(snapshot.traces.map((trace) => trace.spans[0]?.name).sort()).toEqual([
+      'mongodb.insert',
+      'mongoose.PaymentAudit.save',
+    ]);
+  });
+
   it('keeps optional custom spans in trace detail without adding topology nodes', () => {
     const engine = new TopologyEngine();
     const route = trace('custom-detail', 1, 10)[0]!;
@@ -132,6 +149,23 @@ function providerSpan(traceId: string, method: string, seed: number): TelemetryS
       'nodeflow.identity': 'service:PaymentsService',
       'nodeflow.class': 'PaymentsService',
       'nodeflow.method': method,
+    },
+  };
+}
+
+function databaseOperationSpan(traceId: string, operation: string): TelemetrySpan {
+  return {
+    traceId,
+    spanId: `${traceId}-database`,
+    name: operation,
+    kind: 'database',
+    startTimeUnixMs: 1_700_000_000_000,
+    durationMs: 1,
+    status: 'ok',
+    attributes: {
+      'nodeflow.identity': 'database:MongoDB',
+      'nodeflow.topology_name': 'MongoDB',
+      'nodeflow.operation': operation,
     },
   };
 }

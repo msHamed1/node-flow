@@ -103,8 +103,15 @@ function normalizeSpan(span: ReadableSpan): TelemetrySpan {
       attributes[key] = value;
   }
   const kind = resolveKind(span, attributes);
-  const name = resolveName(span, kind, attributes);
-  attributes['nodeflow.identity'] ??= resolveIdentity(kind, name, attributes);
+  const topologyName = resolveName(span, kind, attributes);
+  const keepsOperationName =
+    kind === 'database' || kind === 'redis' || kind === 'queue' || kind === 'external-http';
+  const name = keepsOperationName ? span.name : topologyName;
+  if (keepsOperationName) {
+    attributes['nodeflow.topology_name'] = topologyName;
+    attributes['nodeflow.operation'] ??= span.name;
+  }
+  attributes['nodeflow.identity'] ??= resolveIdentity(kind, topologyName, attributes);
   return {
     traceId: span.spanContext().traceId,
     spanId: span.spanContext().spanId,
@@ -164,6 +171,11 @@ function resolveName(
     );
     return titleCase(system);
   }
+  if (kind === 'queue') {
+    const system = String(attributes['messaging.system'] ?? 'Messaging');
+    if (system === 'rabbitmq' || system === 'amqp' || system === 'amqplib') return 'RabbitMQ';
+    return titleCase(system);
+  }
   return span.name;
 }
 
@@ -172,10 +184,7 @@ function resolveIdentity(
   name: string,
   attributes: Record<string, string | number | boolean>,
 ): string {
-  if (kind === 'database' || kind === 'redis') {
-    const namespace = attributes['db.namespace'] ?? attributes['db.name'] ?? '';
-    return `${kind}:${name}:${String(namespace)}`;
-  }
+  if (kind === 'database' || kind === 'redis' || kind === 'queue') return `${kind}:${name}`;
   return `${kind}:${name}`;
 }
 
@@ -190,7 +199,10 @@ function hasHttpAttributes(attributes: Record<string, string | number | boolean>
 
 function titleCase(value: string): string {
   if (value === 'postgresql' || value === 'postgres') return 'PostgreSQL';
-  if (value === 'mongodb') return 'MongoDB';
+  // The Mongoose and MongoDB instrumentations both describe the same
+  // architectural dependency. Keep their operation names in trace detail,
+  // but aggregate both layers under one MongoDB topology identity.
+  if (value === 'mongodb' || value === 'mongoose') return 'MongoDB';
   return value.length === 0 ? value : value[0]!.toUpperCase() + value.slice(1);
 }
 

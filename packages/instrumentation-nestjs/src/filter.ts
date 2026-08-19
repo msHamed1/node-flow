@@ -15,6 +15,7 @@ const internalProviderNames = new Set([
   'ApplicationConfig',
   'ConfigService',
   'DiscoveryService',
+  'EventSubscribersLoader',
   'ExternalContextCreator',
   'GraphInspector',
   'HttpAdapterHost',
@@ -31,6 +32,7 @@ const internalProviderNames = new Set([
   'RouterExplorer',
   'RoutesResolver',
   'SerializedGraph',
+  'useFactory',
 ]);
 
 const internalProviderSuffixes = ['ExceptionFilter', 'Guard', 'Interceptor', 'Middleware', 'Pipe'];
