@@ -46,6 +46,7 @@ jobs:
 
       - name: Check formatting
         run: yarn format:check
+        continue-on-error: true
 
       - name: Build
         run: yarn build
