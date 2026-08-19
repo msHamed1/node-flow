@@ -7,6 +7,10 @@ import { startCollector } from '@node-flow/collector';
 import { createInstrumentedEnvironment } from './child-environment.js';
 
 const args = process.argv.slice(2);
+if (args[0] === '--help' || args[0] === '-h') {
+  console.log('Usage: node-flow dev -- <command> [args...]');
+  process.exit(0);
+}
 if (args[0] !== 'dev') {
   console.error('Usage: node-flow dev -- <command> [args...]');
   process.exit(1);

@@ -1,0 +1,20 @@
+{
+  "changelog": [
+    "@changesets/changelog-github",
+    {
+      "repo": "msHamed1/node-flow"
+    }
+  ],
+  "commit": false,
+  "fixed": [],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch",
+  "ignore": [],
+  "bumpVersionsWithWorkspaceProtocolOnly": false,
+  "privatePackages": {
+    "version": false,
+    "tag": false
+  }
+}

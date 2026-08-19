@@ -1,13 +1,28 @@
 {
   "name": "@node-flow/instrumentation-node",
   "version": "0.1.0",
+  "description": "OpenTelemetry preload, runtime metrics, and local exporter for NodeFlow.",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "publishConfig": {
     "access": "public"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/msHamed1/node-flow.git",
+    "directory": "packages/instrumentation-node"
+  },
+  "homepage": "https://github.com/msHamed1/node-flow#readme",
+  "bugs": {
+    "url": "https://github.com/msHamed1/node-flow/issues"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

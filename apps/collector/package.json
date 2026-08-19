@@ -1,19 +1,31 @@
 {
   "name": "@node-flow/collector",
   "version": "0.1.0",
+  "description": "Local in-memory telemetry collector and dashboard server for NodeFlow.",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "publishConfig": {
     "access": "public"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/msHamed1/node-flow.git",
+    "directory": "apps/collector"
+  },
+  "homepage": "https://github.com/msHamed1/node-flow#readme",
+  "bugs": {
+    "url": "https://github.com/msHamed1/node-flow/issues"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": "./dist/index.js",
-  "bin": {
-    "node-flow-collector": "./dist/bin.js"
-  },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "lint": "tsc -p tsconfig.json --noEmit",
@@ -22,9 +34,11 @@
   "dependencies": {
     "@node-flow/protocol": "0.1.0",
     "@node-flow/topology-engine": "0.1.0",
-    "@types/express": "^5.0.1",
-    "@types/ws": "^8.18.1",
     "express": "^5.1.0",
     "ws": "^8.18.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.1",
+    "@types/ws": "^8.18.1"
   }
 }

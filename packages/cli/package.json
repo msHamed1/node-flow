@@ -1,6 +1,7 @@
 {
   "name": "@node-flow/node",
   "version": "0.1.0",
+  "description": "Local-first runtime architecture explorer for Node.js and NestJS applications.",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -23,7 +24,9 @@
   },
   "files": [
     "dist",
-    "dashboard"
+    "dashboard",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "rm -rf dist dashboard && tsc -p tsconfig.json && chmod +x dist/cli.js && cp -R ../../apps/dashboard/dist dashboard",
@@ -42,6 +45,9 @@
     "directory": "packages/cli"
   },
   "homepage": "https://github.com/msHamed1/node-flow#readme",
+  "bugs": {
+    "url": "https://github.com/msHamed1/node-flow/issues"
+  },
   "publishConfig": {
     "access": "public"
   }

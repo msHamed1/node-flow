@@ -1,0 +1,85 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Version or publish packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Use supported npm and Yarn Classic
+        run: |
+          npm install --global npm@11
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+          npm --version
+          yarn --version
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Check formatting
+        run: yarn format:check
+
+      - name: Build
+        run: yarn build
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Test
+        run: yarn test
+
+      - name: Inspect npm package payloads
+        run: yarn package:check
+
+      - name: Smoke-test packed packages
+        run: yarn package:smoke
+
+      - name: Create or update version pull request
+        if: vars.NPM_TRUSTED_PUBLISHING_ENABLED != 'true'
+        uses: changesets/action@v1
+        with:
+          version: yarn version-packages
+          title: Release packages
+          commit: Release packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create version pull request or publish with npm trusted publishing
+        if: vars.NPM_TRUSTED_PUBLISHING_ENABLED == 'true'
+        uses: changesets/action@v1
+        with:
+          version: yarn version-packages
+          publish: yarn release
+          title: Release packages
+          commit: Release packages
+          createGithubReleases: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

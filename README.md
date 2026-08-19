@@ -74,9 +74,13 @@ controller and provider boundaries and aggregates completed traces into a runtim
 
 ## Release status
 
-NodeFlow is currently an MVP source preview and has not yet been published to npm. The public
-package surface, transitive runtime packages, CLI binary, exports, and bundled dashboard are
-configured for publication under the `@node-flow` namespace.
+NodeFlow is currently an MVP source preview and has not yet been published to npm. Its public
+package surface, transitive runtime packages, CLI binary, exports, bundled dashboard, package smoke
+tests, Changesets configuration, and npm trusted-publishing workflow are prepared for the
+`@node-flow` namespace.
+
+Publication is intentionally blocked until the project owner selects a license. See
+[RELEASE.md](./RELEASE.md) for the one-time npm bootstrap and the automated release process.
 
 ## Install in a NestJS application
 
@@ -169,16 +173,16 @@ return this.dataSource.query(
 
 ### 4. Run through NodeFlow
 
-Use the npm package directly:
+After installing the package, use its local binary through `npx`:
 
 ```bash
-npx @node-flow/node dev -- npm run start:dev
+npx node-flow dev -- npm run start:dev
 ```
 
-After local installation, the shorter binary is also available:
+Yarn users can invoke the same local binary directly:
 
 ```bash
-node-flow dev -- npm run start:dev
+yarn node-flow dev -- yarn start:dev
 ```
 
 The CLI prints:
@@ -309,6 +313,38 @@ node-flow dev -- npm run start:dev
 
 The dashboard will be available at `http://127.0.0.1:7441`.
 
+## NestJS monorepos
+
+Install `@node-flow/node` in the workspace that owns the NestJS application, import
+`NodeFlowModule` in that application's root module, and launch that workspace through NodeFlow.
+
+For a Yarn Classic workspace named `@acme/payments-api`:
+
+```bash
+yarn workspace @acme/payments-api add --dev @node-flow/node
+yarn workspace @acme/payments-api node-flow dev -- yarn workspace @acme/payments-api start:dev
+```
+
+For an npm workspace at `apps/payments-api`:
+
+```bash
+npm install --save-dev @node-flow/node --workspace apps/payments-api
+cd apps/payments-api
+npx node-flow dev -- npm run start:dev
+```
+
+The preload is inherited by child Node.js processes through `NODE_OPTIONS`. When developing several
+services simultaneously, start one NodeFlow command per service and assign each collector a unique
+`NODEFLOW_PORT`. The current MVP does not merge multiple collectors into one dashboard.
+
+A single NestJS application in a monorepo is fully supported. For example, launching an `api`
+application instruments that application and singleton providers imported from `libs/*` when
+NestJS instantiates them in the `api` container. NodeFlow follows executed runtime boundaries, not
+the physical workspace directory that contains a provider.
+
+Running `api`, `worker`, and `admin-api` together and merging all three processes into one unified
+topology is not supported yet. Multi-process service grouping is a future capability.
+
 ## Try the included demo
 
 Repository development uses Yarn Classic 1.22:
@@ -374,7 +410,8 @@ NODEFLOW_DEBUG=1 node-flow dev -- npm run start:dev
 
 ## Current MVP limitations
 
-- The npm packages are configured but not yet published.
+- The npm packages are configured but not yet published, and publication remains blocked until a
+  license is selected.
 - One `NodeFlowModule` import remains required because NestJS has no public preload-to-container
   discovery hook.
 - State is process-local and cleared on restart.
@@ -388,15 +425,36 @@ NODEFLOW_DEBUG=1 node-flow dev -- npm run start:dev
 ## Repository development
 
 ```bash
-yarn install
-yarn format
+yarn install --frozen-lockfile
 yarn format:check
 yarn build
 yarn lint
 yarn test
+yarn package:check
+yarn package:smoke
 ```
 
-The repository is prepared for `github.com/msHamed1/node-flow`.
+Use `yarn format` to apply Prettier. Contributors should read [CONTRIBUTING.md](./CONTRIBUTING.md) and
+add a Changeset for user-visible package changes. Maintainers should follow [RELEASE.md](./RELEASE.md)
+for first publication, trusted-publisher setup, recovery, prereleases, deprecation, and rollback.
+
+The repository is prepared for `github.com/msHamed1/node-flow` and uses Yarn Classic 1.22 for
+workspace dependency management.
+
+## Release process
+
+For every user-visible package change, run:
+
+```bash
+yarn changeset
+```
+
+Select `patch` for a backward-compatible fix, `minor` for a backward-compatible feature, or `major`
+for a breaking change, then commit the generated `.changeset/*.md` file with the implementation.
+After the pull request merges, GitHub Actions creates or updates the `Release packages` version pull
+request. Merging that reviewed version pull request publishes through npm Trusted Publishing and
+creates the corresponding tags and GitHub Releases. Ordinary commits without Changesets do not bump
+or publish a package.
 
 ## Product scope
 

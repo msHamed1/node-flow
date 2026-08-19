@@ -1,13 +1,28 @@
 {
   "name": "@node-flow/protocol",
   "version": "0.1.0",
+  "description": "Internal telemetry and topology contracts used by NodeFlow runtime packages.",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "publishConfig": {
     "access": "public"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/msHamed1/node-flow.git",
+    "directory": "packages/protocol"
+  },
+  "homepage": "https://github.com/msHamed1/node-flow#readme",
+  "bugs": {
+    "url": "https://github.com/msHamed1/node-flow/issues"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": "./dist/index.js",
