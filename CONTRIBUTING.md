@@ -46,6 +46,10 @@ yarn demo
 | `apps/collector`                  | Local collector and dashboard server                      | Yes, runtime dependency |
 | `apps/dashboard`                  | Dashboard source bundled into `@mshamed1/node-flow`       | No                      |
 | `apps/demo-nestjs`                | Local demonstration application                           | No                      |
+| `apps/integration-api`            | Real NestJS API integration fixture                       | No                      |
+| `apps/integration-worker`         | Real RabbitMQ consumer integration fixture                | No                      |
+| `apps/mock-risk-service`          | Local outgoing-HTTP integration fixture                   | No                      |
+| `packages/integration-contracts`  | Private API/worker event contracts                        | No                      |
 
 The internal packages are published because the main package imports them at runtime; TypeScript
 does not bundle those dependencies into `@mshamed1/node-flow`.
@@ -66,6 +70,19 @@ yarn package:smoke
 `package:check` inspects every `npm pack --dry-run` payload. `package:smoke` creates real tarballs,
 installs them into a clean temporary consumer, verifies public imports, and runs
 `node-flow --help`.
+
+Changes to runtime instrumentation, topology semantics, the CLI preload path, or integration
+fixtures should also run the real-infrastructure suite:
+
+```bash
+yarn integration:up
+yarn integration:test
+yarn integration:down
+```
+
+The suite requires Docker Compose and uses only demo-local credentials from `.env.example`. The
+release workflow always runs it before Changesets can publish. Pull-request CI keeps the faster
+build, lint, unit, and package checks mandatory; Prettier remains informational in both workflows.
 
 Apply formatting with:
 

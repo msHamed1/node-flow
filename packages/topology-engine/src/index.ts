@@ -156,7 +156,9 @@ export class TopologyEngine {
     const identity = String(span.attributes?.['nodeflow.identity'] ?? span.name);
     const className = stringAttribute(span, 'nodeflow.class');
     const nodeName =
-      (type === 'controller' || type === 'service') && className ? className : span.name;
+      (type === 'controller' || type === 'service') && className
+        ? className
+        : (stringAttribute(span, 'nodeflow.topology_name') ?? span.name);
     const id = stableId(type, identity);
     let node = this.nodes.get(id);
     if (!node && create) {

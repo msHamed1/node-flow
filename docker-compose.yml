@@ -1,0 +1,206 @@
+x-nodeflow-runtime: &nodeflow-runtime
+  image: nodeflow-integration:local
+
+x-nodeflow-build: &nodeflow-build
+  <<: *nodeflow-runtime
+  build:
+    context: .
+    dockerfile: Dockerfile.integration
+
+x-nodeflow-environment: &nodeflow-environment
+  NODEFLOW_COLLECTOR_URL: http://nodeflow:7331
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: 5432
+  POSTGRES_USER: ${POSTGRES_USER:-nodeflow}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nodeflow}
+  POSTGRES_DB: ${POSTGRES_DB:-nodeflow}
+  MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017/nodeflow}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+  RABBITMQ_URL: ${RABBITMQ_URL:-amqp://nodeflow:nodeflow@rabbitmq:5672}
+  RISK_SERVICE_URL: ${RISK_SERVICE_URL:-http://mock-risk-service:3100}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nodeflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nodeflow}
+      POSTGRES_DB: ${POSTGRES_DB:-nodeflow}
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  mongodb:
+    image: mongo:7.0
+    ports:
+      - '127.0.0.1:27017:27017'
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping').ok"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '127.0.0.1:6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  rabbitmq:
+    image: rabbitmq:4.1-management
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-nodeflow}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-nodeflow}
+    ports:
+      - '127.0.0.1:5672:5672'
+      - '127.0.0.1:15672:15672'
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'check_port_connectivity']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  nodeflow:
+    <<: *nodeflow-build
+    command: ['node', 'packages/cli/dist/cli.js', 'collector']
+    environment:
+      NODEFLOW_HOST: 0.0.0.0
+      NODEFLOW_PORT: 7331
+    ports:
+      - '127.0.0.1:7331:7331'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:7331/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  mock-risk-service:
+    <<: *nodeflow-runtime
+    command:
+      [
+        'node',
+        'packages/cli/dist/cli.js',
+        'run',
+        '--',
+        'node',
+        'apps/mock-risk-service/dist/main.js',
+      ]
+    environment:
+      NODEFLOW_COLLECTOR_URL: http://nodeflow:7331
+      NODEFLOW_SERVICE_NAME: mock-risk-service
+      PORT: 3100
+    depends_on:
+      nodeflow:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:3100:3100'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('node:net').connect(3100,'127.0.0.1').on('connect',function(){this.end()}).on('error',()=>process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  integration-worker:
+    <<: *nodeflow-runtime
+    command:
+      [
+        'node',
+        'packages/cli/dist/cli.js',
+        'run',
+        '--',
+        'node',
+        'apps/integration-worker/dist/main.js',
+      ]
+    environment:
+      <<: *nodeflow-environment
+      NODEFLOW_SERVICE_NAME: integration-worker
+      WORKER_HEALTH_PORT: 3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      nodeflow:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('node:net').connect(3001,'127.0.0.1').on('connect',function(){this.end()}).on('error',()=>process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  integration-api:
+    <<: *nodeflow-runtime
+    command:
+      ['node', 'packages/cli/dist/cli.js', 'run', '--', 'node', 'apps/integration-api/dist/main.js']
+    environment:
+      <<: *nodeflow-environment
+      NODEFLOW_SERVICE_NAME: integration-api
+      PORT: 3000
+      HOST: 0.0.0.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      nodeflow:
+        condition: service_healthy
+      mock-risk-service:
+        condition: service_healthy
+      integration-worker:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:3000:3000'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('node:net').connect(3000,'127.0.0.1').on('connect',function(){this.end()}).on('error',()=>process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+volumes:
+  postgres-data:
+  mongodb-data:
+  rabbitmq-data:

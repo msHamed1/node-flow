@@ -297,11 +297,13 @@ filename is `nodeflow.config.ts`.
 
 ## Environment variables
 
-| Environment variable    | Default                  | Purpose                                     |
-| ----------------------- | ------------------------ | ------------------------------------------- |
-| `NODEFLOW_PORT`         | `7331`                   | Collector and dashboard port                |
-| `NODEFLOW_SERVICE_NAME` | Application package name | Name reported by the instrumented process   |
-| `NODEFLOW_DEBUG`        | Disabled                 | Set to `1` to log telemetry export failures |
+| Environment variable     | Default                  | Purpose                                     |
+| ------------------------ | ------------------------ | ------------------------------------------- |
+| `NODEFLOW_PORT`          | `7331`                   | Collector and dashboard port                |
+| `NODEFLOW_HOST`          | `127.0.0.1`              | Collector bind host                         |
+| `NODEFLOW_COLLECTOR_URL` | `http://127.0.0.1:7331`  | Shared collector used by `node-flow run`    |
+| `NODEFLOW_SERVICE_NAME`  | Application package name | Name reported by the instrumented process   |
+| `NODEFLOW_DEBUG`         | Disabled                 | Set to `1` to log telemetry export failures |
 
 Example:
 
@@ -333,17 +335,27 @@ cd apps/payments-api
 npx node-flow dev -- npm run start:dev
 ```
 
-The preload is inherited by child Node.js processes through `NODE_OPTIONS`. When developing several
-services simultaneously, start one NodeFlow command per service and assign each collector a unique
-`NODEFLOW_PORT`. The current MVP does not merge multiple collectors into one dashboard.
+The preload is inherited by child Node.js processes through `NODE_OPTIONS`. The normal `dev` command
+owns one application and collector. For several local services, start a shared collector and point
+each instrumented process at it:
+
+```bash
+node-flow collector
+NODEFLOW_COLLECTOR_URL=http://127.0.0.1:7331 \
+NODEFLOW_SERVICE_NAME=payments-api \
+node-flow run -- yarn workspace @acme/payments-api start:dev
+```
+
+Repeat the `run` command with a distinct service name for each local process. This is the same
+multi-process path exercised by the Docker integration lab.
 
 A single NestJS application in a monorepo is fully supported. For example, launching an `api`
 application instruments that application and singleton providers imported from `libs/*` when
 NestJS instantiates them in the `api` container. NodeFlow follows executed runtime boundaries, not
 the physical workspace directory that contains a provider.
 
-Running `api`, `worker`, and `admin-api` together and merging all three processes into one unified
-topology is not supported yet. Multi-process service grouping is a future capability.
+Local `api`, `worker`, and `admin-api` processes can send telemetry to one collector. Explicit
+service-group nodes and multi-host collection remain outside the current MVP.
 
 ## Try the included demo
 
@@ -373,6 +385,127 @@ POST /payments → PaymentsController → PaymentsService → PostgreSQL
 
 The demo simulates PostgreSQL through optional `traceBoundary()` so Docker is not required. Its
 controller and service contain no tracing calls.
+
+## Real integration demo
+
+The Docker integration lab validates the package against actual infrastructure and the same public
+surface an external NestJS application uses. It starts PostgreSQL, MongoDB, Redis, RabbitMQ, a
+NestJS API, a NestJS queue worker, a local risk service, and one shared NodeFlow
+collector/dashboard.
+
+Start the complete environment from the repository root:
+
+```bash
+yarn integration:up
+```
+
+This runs `docker compose up -d --build --wait`. When it completes, open:
+
+- API: [http://127.0.0.1:3000](http://127.0.0.1:3000)
+- NodeFlow dashboard: [http://127.0.0.1:7331](http://127.0.0.1:7331)
+- RabbitMQ management: [http://127.0.0.1:15672](http://127.0.0.1:15672)
+
+RabbitMQ uses the demo-only username and password `nodeflow`. All local defaults are documented in
+[.env.example](./.env.example); do not reuse them outside this disposable environment.
+
+Run the primary flow:
+
+```bash
+curl -X POST http://127.0.0.1:3000/integration/full-flow \
+  -H 'content-type: application/json' \
+  -d '{"amount":125,"currency":"USD"}'
+```
+
+It executes this real runtime path:
+
+```text
+POST /integration/full-flow
+  → IntegrationController
+  → IntegrationService
+      ├─ Redis SET NX (idempotency)
+      ├─ PostgreSQL transaction: INSERT, SELECT, UPDATE
+      ├─ Mongoose create + findById
+      ├─ POST mock-risk-service/risk/check
+      ├─ payment.created.local → AuditListener
+      └─ RabbitMQ publish payments.created
+           → PaymentWorker
+              ├─ MongoDB/Mongoose persistence
+              ├─ PostgreSQL UPDATE
+              └─ RabbitMQ publish payments.settled
+                   → settled-event consumer
+```
+
+The main topology aggregates the client operations into stable architecture nodes:
+
+```text
+HTTP route → IntegrationController → IntegrationService
+                                      ├─ Redis
+                                      ├─ PostgreSQL
+                                      ├─ MongoDB
+                                      ├─ mock-risk-service
+                                      └─ RabbitMQ → PaymentWorker
+```
+
+Run the automated real-infrastructure assertions:
+
+```bash
+yarn integration:test
+```
+
+The test executes 100 PostgreSQL transactions and verifies they remain one architecture node. It
+also verifies every documented Mongoose and Redis operation, RabbitMQ producer and both consumer
+paths, outgoing HTTP, the cache miss/hit path, the local event listener, one correlated API-to-worker
+trace, and deterministic PostgreSQL, MongoDB, Redis, RabbitMQ, HTTP, business, and worker failures.
+
+Focused fixtures are available at `POST /integration/postgres`, `/mongoose`, `/redis`, `/rabbitmq`,
+and `/http`; the application flow is also exposed as `POST /payments`, `GET /payments/:id`, and
+`GET /players/:id`. Trigger a deterministic failure without stopping infrastructure by passing one
+of `postgres`, `mongodb`, `redis`, `rabbitmq`, `http`, `business`, or `worker`:
+
+```bash
+curl -X POST http://127.0.0.1:3000/integration/full-flow \
+  -H 'content-type: application/json' \
+  -d '{"amount":125,"currency":"USD","failAt":"mongodb"}'
+```
+
+Inspect service logs or reset the lab with:
+
+```bash
+yarn integration:logs
+yarn integration:down
+```
+
+`integration:down` runs `docker compose down -v --remove-orphans` and deletes only the lab's named
+database volumes.
+
+### Verified compatibility
+
+These versions were exercised together by the Docker suite; "verified" below means the real client
+operation produced NodeFlow telemetry and passed the automated topology/trace assertions.
+
+| Integration    | Tested client/framework                          | Tested service          | Result   |
+| -------------- | ------------------------------------------------ | ----------------------- | -------- |
+| NestJS         | `@nestjs/core` 11.2.1, `@nestjs/mongoose` 11.0.4 | Node.js 22.23.2         | Verified |
+| PostgreSQL     | `pg` 8.23.0                                      | PostgreSQL 16.15        | Verified |
+| Mongoose       | `mongoose` 8.24.3                                | MongoDB 7.0.40          | Verified |
+| MongoDB driver | `mongodb` 6.20.0                                 | MongoDB 7.0.40          | Verified |
+| Redis          | `redis` 4.7.1                                    | Redis 7.4.10            | Verified |
+| RabbitMQ       | `amqplib` 0.10.9                                 | RabbitMQ 4.1.8          | Verified |
+| Outgoing HTTP  | Node.js `fetch`                                  | local mock risk service | Verified |
+
+The tested OpenTelemetry instrumentation versions are PostgreSQL 0.56.1, MongoDB 0.56.0,
+Mongoose 0.50.0, Redis 0.52.0, amqplib 0.50.0, and HTTP 0.203.0.
+
+Mongoose `create()` produces Mongoose `save` plus MongoDB driver `insert` spans, and `findById()` is
+reported as Mongoose `findOne`; the suite asserts those observed names. Mongoose and driver spans
+retain their distinct operation names in recent traces but share one `MongoDB` topology identity,
+preventing a `Mongoose → driver → MongoDB` architecture chain.
+
+Nest `EventEmitter2` has no dedicated event semantic instrumentation. The realistic
+`payment.created.local` case is present without manual tracing. NodeFlow's existing singleton
+provider instrumentation sees `AuditListener.handlePaymentCreated`, but it does not currently model
+an event publisher, event name, or event edge. Dedicated Nest event semantics are therefore a
+worthwhile future compatibility improvement.
 
 ## Troubleshooting
 
@@ -418,8 +551,10 @@ NODEFLOW_DEBUG=1 node-flow dev -- npm run start:dev
 - Request-scoped, transient, and dynamically created providers are intentionally skipped.
 - Inherited methods, instance arrow functions, accessors, lifecycle hooks, framework providers, and
   NodeFlow providers are skipped.
-- One local application process and collector are assumed.
-- MongoDB, Redis, RabbitMQ, and external HTTP naming need broader compatibility testing.
+- Several local processes can share one collector, but explicit service-group topology nodes are
+  not yet modeled.
+- Verified integration versions are intentionally narrow; other client and framework versions need
+  separate compatibility runs before they are documented as verified.
 
 ## Repository development
 
@@ -431,6 +566,9 @@ yarn lint
 yarn test
 yarn package:check
 yarn package:smoke
+yarn integration:up
+yarn integration:test
+yarn integration:down
 ```
 
 Use `yarn format` to apply Prettier. Contributors should read [CONTRIBUTING.md](./CONTRIBUTING.md) and

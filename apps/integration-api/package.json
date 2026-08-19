@@ -1,0 +1,31 @@
+{
+  "name": "@mshamed1/node-flow-integration-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/main.js",
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@mshamed1/node-flow": "0.1.0",
+    "@mshamed1/node-flow-integration-contracts": "0.1.0",
+    "@nestjs/common": "^11.1.0",
+    "@nestjs/core": "^11.1.0",
+    "@nestjs/event-emitter": "^3.0.1",
+    "@nestjs/mongoose": "^11.0.3",
+    "@nestjs/platform-express": "^11.1.0",
+    "amqplib": "^0.10.8",
+    "mongoose": "^8.15.0",
+    "pg": "^8.16.0",
+    "redis": "^4.7.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.7",
+    "@types/pg": "^8.15.1"
+  }
+}

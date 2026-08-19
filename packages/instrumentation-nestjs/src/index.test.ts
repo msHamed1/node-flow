@@ -170,11 +170,17 @@ describe('automatic NestJS provider instrumentation', () => {
     class ConfigService {
       get(): void {}
     }
+    class EventSubscribersLoader {
+      load(): void {}
+    }
     class InternalPaymentAdapter {
       run(): void {}
     }
     class RequestService {
       run(): void {}
+    }
+    function useFactory(): object {
+      return {};
     }
 
     const options = resolveTracingOptions({
@@ -184,6 +190,13 @@ describe('automatic NestJS provider instrumentation', () => {
     expect(
       shouldInstrumentProvider(providerWrapper(new ConfigService(), ConfigService), options),
     ).toBe(false);
+    expect(
+      shouldInstrumentProvider(
+        providerWrapper(new EventSubscribersLoader(), EventSubscribersLoader),
+        options,
+      ),
+    ).toBe(false);
+    expect(shouldInstrumentProvider(providerWrapper({}, useFactory), options)).toBe(false);
     expect(
       shouldInstrumentProvider(
         providerWrapper(new InternalPaymentAdapter(), InternalPaymentAdapter),
