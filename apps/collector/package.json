@@ -1,6 +1,6 @@
 {
   "name": "@mshamed1/node-flow-collector",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Local in-memory telemetry collector and dashboard server for NodeFlow.",
   "license": "Apache-2.0",
   "type": "module",
@@ -33,8 +33,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@mshamed1/node-flow-protocol": "0.1.0",
-    "@mshamed1/node-flow-topology-engine": "0.1.0",
+    "@mshamed1/node-flow-protocol": "1.0.0",
+    "@mshamed1/node-flow-topology-engine": "1.0.0",
     "express": "^5.1.0",
     "ws": "^8.18.1"
   },
