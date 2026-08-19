@@ -1,6 +1,6 @@
 {
   "name": "@mshamed1/node-flow-core",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Optional custom span and architectural boundary APIs for NodeFlow.",
   "license": "Apache-2.0",
   "type": "module",
@@ -33,7 +33,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@mshamed1/node-flow-protocol": "0.1.0",
+    "@mshamed1/node-flow-protocol": "1.0.0",
     "@opentelemetry/api": "^1.9.0"
   }
 }
