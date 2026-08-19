@@ -2,6 +2,7 @@
   "name": "@node-flow/instrumentation-nestjs",
   "version": "0.1.0",
   "description": "Safe NestJS controller and singleton-provider instrumentation for NodeFlow.",
+  "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "node": ">=20"

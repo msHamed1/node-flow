@@ -2,6 +2,7 @@
   "name": "@node-flow/topology-engine",
   "version": "0.1.0",
   "description": "In-memory runtime topology aggregation engine for NodeFlow.",
+  "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "node": ">=20"

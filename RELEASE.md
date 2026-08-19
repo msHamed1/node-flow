@@ -21,22 +21,20 @@ Packages are published in dependency order:
 The dashboard and demo workspaces remain private. The dashboard build is shipped inside the main
 package under `dashboard/`.
 
-## Current release blocker: choose a license
+## License
 
-The repository currently has no `LICENSE` file and the package manifests do not claim a license.
-This is a legal/product decision, so the release setup does not invent one.
+NodeFlow uses Apache License 2.0. The root and all seven public package directories carry the same
+license text, and every public package manifest declares the `Apache-2.0` SPDX identifier.
 
-Before first publication, the project owner must:
+When the license text or package structure changes, maintainers must confirm:
 
-1. Select a license with legal advice appropriate to the project.
-2. Add its full text as the root `LICENSE` file.
-3. Copy that exact `LICENSE` file into each of the seven public package directories so every npm
-   tarball carries the license text.
-4. Add the same valid SPDX `license` value to every public package manifest listed above.
-5. Run `yarn release:check` and resolve every reported error.
+1. The root `LICENSE` and each package copy are byte-for-byte identical.
+2. Every public manifest uses the same valid SPDX identifier.
+3. Every npm tarball includes `LICENSE`.
+4. `yarn release:check` passes.
 
-The automated `yarn release` command begins with this check and therefore cannot publish while the
-license decision is incomplete.
+The automated `yarn release` command begins with this validation and refuses to publish inconsistent
+license metadata or files.
 
 ## One-time first publication
 

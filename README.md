@@ -79,8 +79,8 @@ package surface, transitive runtime packages, CLI binary, exports, bundled dashb
 tests, Changesets configuration, and npm trusted-publishing workflow are prepared for the
 `@node-flow` namespace.
 
-Publication is intentionally blocked until the project owner selects a license. See
-[RELEASE.md](./RELEASE.md) for the one-time npm bootstrap and the automated release process.
+NodeFlow is licensed under Apache License 2.0. See [RELEASE.md](./RELEASE.md) for the one-time npm
+bootstrap and the automated release process.
 
 ## Install in a NestJS application
 
@@ -410,8 +410,7 @@ NODEFLOW_DEBUG=1 node-flow dev -- npm run start:dev
 
 ## Current MVP limitations
 
-- The npm packages are configured but not yet published, and publication remains blocked until a
-  license is selected.
+- The npm packages are configured but not yet published.
 - One `NodeFlowModule` import remains required because NestJS has no public preload-to-container
   discovery hook.
 - State is process-local and cleared on restart.

@@ -2,6 +2,7 @@
   "name": "@node-flow/instrumentation-node",
   "version": "0.1.0",
   "description": "OpenTelemetry preload, runtime metrics, and local exporter for NodeFlow.",
+  "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "node": ">=20"

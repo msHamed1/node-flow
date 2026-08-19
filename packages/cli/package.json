@@ -2,6 +2,7 @@
   "name": "@node-flow/node",
   "version": "0.1.0",
   "description": "Local-first runtime architecture explorer for Node.js and NestJS applications.",
+  "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "node": ">=20"

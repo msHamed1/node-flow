@@ -2,6 +2,7 @@
   "name": "@node-flow/collector",
   "version": "0.1.0",
   "description": "Local in-memory telemetry collector and dashboard server for NodeFlow.",
+  "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "node": ">=20"

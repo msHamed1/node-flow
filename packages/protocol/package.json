@@ -2,6 +2,7 @@
   "name": "@node-flow/protocol",
   "version": "0.1.0",
   "description": "Internal telemetry and topology contracts used by NodeFlow runtime packages.",
+  "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "node": ">=20"

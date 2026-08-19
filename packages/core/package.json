@@ -2,6 +2,7 @@
   "name": "@node-flow/core",
   "version": "0.1.0",
   "description": "Optional custom span and architectural boundary APIs for NodeFlow.",
+  "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "node": ">=20"
