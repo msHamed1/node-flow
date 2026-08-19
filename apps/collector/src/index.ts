@@ -3,7 +3,13 @@ import { existsSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { resolve } from 'node:path';
 import { WebSocket, WebSocketServer } from 'ws';
-import { collectorPaths, type CollectorMessage, type RuntimeMetrics, type SpanBatch, type TopologySnapshot } from '@nodescope/protocol';
+import {
+  collectorPaths,
+  type CollectorMessage,
+  type RuntimeMetrics,
+  type SpanBatch,
+  type TopologySnapshot,
+} from '@nodescope/protocol';
 import { TopologyEngine } from '@nodescope/topology-engine';
 
 export interface CollectorOptions {
@@ -41,7 +47,9 @@ export async function startCollector(options: CollectorOptions = {}): Promise<Ru
   websocket.on('connection', (client) => {
     const connected: CollectorMessage = { type: 'connected', payload: { version: '0.1.0' } };
     client.send(JSON.stringify(connected));
-    client.send(JSON.stringify({ type: 'snapshot', payload: engine.snapshot() } satisfies CollectorMessage));
+    client.send(
+      JSON.stringify({ type: 'snapshot', payload: engine.snapshot() } satisfies CollectorMessage),
+    );
   });
 
   app.get(collectorPaths.health, (_request, response) => {
@@ -71,10 +79,14 @@ export async function startCollector(options: CollectorOptions = {}): Promise<Ru
   const dashboardDirectory = options.dashboardDirectory ?? process.env.NODESCOPE_DASHBOARD_DIR;
   if (dashboardDirectory && existsSync(dashboardDirectory)) {
     app.use(express.static(dashboardDirectory));
-    app.get('*path', (_request, response) => response.sendFile(resolve(dashboardDirectory, 'index.html')));
+    app.get('*path', (_request, response) =>
+      response.sendFile(resolve(dashboardDirectory, 'index.html')),
+    );
   } else {
     app.get('/', (_request, response) => {
-      response.type('text').send('NodeScope collector is running. Build the dashboard to enable the UI.');
+      response
+        .type('text')
+        .send('NodeScope collector is running. Build the dashboard to enable the UI.');
     });
   }
 
@@ -87,8 +99,12 @@ export async function startCollector(options: CollectorOptions = {}): Promise<Ru
     engine,
     close: async () => {
       for (const client of websocket.clients) client.close();
-      await new Promise<void>((resolveClose, reject) => websocket.close((error) => error ? reject(error) : resolveClose()));
-      await new Promise<void>((resolveClose, reject) => server.close((error) => error ? reject(error) : resolveClose()));
+      await new Promise<void>((resolveClose, reject) =>
+        websocket.close((error) => (error ? reject(error) : resolveClose())),
+      );
+      await new Promise<void>((resolveClose, reject) =>
+        server.close((error) => (error ? reject(error) : resolveClose())),
+      );
     },
   };
 }

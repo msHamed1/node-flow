@@ -3,10 +3,19 @@ import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentation
 import { ExportResultCode, suppressTracing, type ExportResult } from '@opentelemetry/core';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { NodeSDK } from '@opentelemetry/sdk-node';
-import { BatchSpanProcessor, type ReadableSpan, type SpanExporter } from '@opentelemetry/sdk-trace-base';
+import {
+  BatchSpanProcessor,
+  type ReadableSpan,
+  type SpanExporter,
+} from '@opentelemetry/sdk-trace-base';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 import { monitorEventLoopDelay, performance } from 'node:perf_hooks';
-import type { RuntimeMetrics, SpanBatch, TelemetrySpan, TelemetrySpanKind } from '@nodescope/protocol';
+import type {
+  RuntimeMetrics,
+  SpanBatch,
+  TelemetrySpan,
+  TelemetrySpanKind,
+} from '@nodescope/protocol';
 
 let runningSdk: NodeSDK | undefined;
 
@@ -14,25 +23,31 @@ export function startNodeScopeInstrumentation(): NodeSDK {
   if (runningSdk) return runningSdk;
 
   const collectorUrl = process.env.NODESCOPE_COLLECTOR_URL ?? 'http://127.0.0.1:7331';
-  const serviceName = process.env.NODESCOPE_SERVICE_NAME ?? process.env.npm_package_name ?? 'node-application';
+  const serviceName =
+    process.env.NODESCOPE_SERVICE_NAME ?? process.env.npm_package_name ?? 'node-application';
   const exporter = new LocalCollectorExporter(collectorUrl, serviceName);
   const sdk = new NodeSDK({
     resource: resourceFromAttributes({ [ATTR_SERVICE_NAME]: serviceName }),
-    spanProcessors: [new BatchSpanProcessor(exporter, {
-      scheduledDelayMillis: 250,
-      maxExportBatchSize: 64,
-      maxQueueSize: 512,
-    })],
-    instrumentations: [getNodeAutoInstrumentations({
-      '@opentelemetry/instrumentation-fs': { enabled: false },
-      '@opentelemetry/instrumentation-http': {
-        ignoreOutgoingRequestHook: (request) => {
-          const host = typeof request === 'string' ? request : request.hostname ?? request.host ?? '';
-          const path = typeof request === 'string' ? request : request.path ?? '';
-          return `${host}${path}`.includes(new URL(collectorUrl).host);
+    spanProcessors: [
+      new BatchSpanProcessor(exporter, {
+        scheduledDelayMillis: 250,
+        maxExportBatchSize: 64,
+        maxQueueSize: 512,
+      }),
+    ],
+    instrumentations: [
+      getNodeAutoInstrumentations({
+        '@opentelemetry/instrumentation-fs': { enabled: false },
+        '@opentelemetry/instrumentation-http': {
+          ignoreOutgoingRequestHook: (request) => {
+            const host =
+              typeof request === 'string' ? request : (request.hostname ?? request.host ?? '');
+            const path = typeof request === 'string' ? request : (request.path ?? '');
+            return `${host}${path}`.includes(new URL(collectorUrl).host);
+          },
         },
-      },
-    })],
+      }),
+    ],
   });
   sdk.start();
   runningSdk = sdk;
@@ -46,7 +61,10 @@ export function startNodeScopeInstrumentation(): NodeSDK {
 }
 
 class LocalCollectorExporter implements SpanExporter {
-  constructor(private readonly collectorUrl: string, private readonly serviceName: string) {}
+  constructor(
+    private readonly collectorUrl: string,
+    private readonly serviceName: string,
+  ) {}
 
   export(spans: ReadableSpan[], callback: (result: ExportResult) => void): void {
     const batch: SpanBatch = {
@@ -63,8 +81,12 @@ class LocalCollectorExporter implements SpanExporter {
         });
         callback({ code: response.ok ? ExportResultCode.SUCCESS : ExportResultCode.FAILED });
       } catch (error) {
-        if (process.env.NODESCOPE_DEBUG === '1') console.error('[NodeScope] telemetry export failed:', error);
-        callback({ code: ExportResultCode.FAILED, error: error instanceof Error ? error : new Error(String(error)) });
+        if (process.env.NODESCOPE_DEBUG === '1')
+          console.error('[NodeScope] telemetry export failed:', error);
+        callback({
+          code: ExportResultCode.FAILED,
+          error: error instanceof Error ? error : new Error(String(error)),
+        });
       }
     });
   }
@@ -77,11 +99,12 @@ class LocalCollectorExporter implements SpanExporter {
 function normalizeSpan(span: ReadableSpan): TelemetrySpan {
   const attributes: Record<string, string | number | boolean> = {};
   for (const [key, value] of Object.entries(span.attributes)) {
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') attributes[key] = value;
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
+      attributes[key] = value;
   }
   const kind = resolveKind(span, attributes);
   const name = resolveName(span, kind, attributes);
-  attributes['nodescope.identity'] = resolveIdentity(kind, name, attributes);
+  attributes['nodescope.identity'] ??= resolveIdentity(kind, name, attributes);
   return {
     traceId: span.spanContext().traceId,
     spanId: span.spanContext().spanId,
@@ -95,8 +118,15 @@ function normalizeSpan(span: ReadableSpan): TelemetrySpan {
   };
 }
 
-function resolveKind(span: ReadableSpan, attributes: Record<string, string | number | boolean>): TelemetrySpanKind {
-  const explicit = attributes['nodescope.type'];
+function resolveKind(
+  span: ReadableSpan,
+  attributes: Record<string, string | number | boolean>,
+): TelemetrySpanKind {
+  const minimumDuration = attributes['nodescope.min_duration_ms'];
+  const durationMs = span.duration[0] * 1_000 + span.duration[1] / 1_000_000;
+  if (typeof minimumDuration === 'number' && durationMs < minimumDuration) return 'internal';
+
+  const explicit = attributes['nodescope.kind'] ?? attributes['nodescope.type'];
   if (typeof explicit === 'string') return explicit as TelemetrySpanKind;
   const dbSystem = attributes['db.system'] ?? attributes['db.system.name'];
   if (dbSystem === 'redis') return 'redis';
@@ -107,24 +137,41 @@ function resolveKind(span: ReadableSpan, attributes: Record<string, string | num
   return 'internal';
 }
 
-function resolveName(span: ReadableSpan, kind: TelemetrySpanKind, attributes: Record<string, string | number | boolean>): string {
+function resolveName(
+  span: ReadableSpan,
+  kind: TelemetrySpanKind,
+  attributes: Record<string, string | number | boolean>,
+): string {
   if (kind === 'http-route') {
-    const method = String(attributes['http.request.method'] ?? attributes['http.method'] ?? '').toUpperCase();
-    const route = String(attributes['http.route'] ?? attributes['url.path'] ?? span.name.replace(/^\w+\s+/, ''));
+    const method = String(
+      attributes['http.request.method'] ?? attributes['http.method'] ?? '',
+    ).toUpperCase();
+    const route = String(
+      attributes['http.route'] ?? attributes['url.path'] ?? span.name.replace(/^\w+\s+/, ''),
+    );
     return `${method} ${route}`.trim();
   }
   if (kind === 'external-http') {
-    const host = attributes['server.address'] ?? attributes['net.peer.name'] ?? attributes['http.host'];
+    const host =
+      attributes['server.address'] ?? attributes['net.peer.name'] ?? attributes['http.host'];
     return host ? String(host) : span.name;
   }
   if (kind === 'database' || kind === 'redis') {
-    const system = String(attributes['db.system'] ?? attributes['db.system.name'] ?? (kind === 'redis' ? 'Redis' : 'Database'));
+    const system = String(
+      attributes['db.system'] ??
+        attributes['db.system.name'] ??
+        (kind === 'redis' ? 'Redis' : 'Database'),
+    );
     return titleCase(system);
   }
   return span.name;
 }
 
-function resolveIdentity(kind: TelemetrySpanKind, name: string, attributes: Record<string, string | number | boolean>): string {
+function resolveIdentity(
+  kind: TelemetrySpanKind,
+  name: string,
+  attributes: Record<string, string | number | boolean>,
+): string {
   if (kind === 'database' || kind === 'redis') {
     const namespace = attributes['db.namespace'] ?? attributes['db.name'] ?? '';
     return `${kind}:${name}:${String(namespace)}`;
@@ -133,7 +180,12 @@ function resolveIdentity(kind: TelemetrySpanKind, name: string, attributes: Reco
 }
 
 function hasHttpAttributes(attributes: Record<string, string | number | boolean>): boolean {
-  return 'http.request.method' in attributes || 'http.method' in attributes || 'url.full' in attributes || 'http.url' in attributes;
+  return (
+    'http.request.method' in attributes ||
+    'http.method' in attributes ||
+    'url.full' in attributes ||
+    'http.url' in attributes
+  );
 }
 
 function titleCase(value: string): string {
@@ -168,12 +220,14 @@ function startRuntimeMetrics(collectorUrl: string, serviceName: string): void {
       eventLoopUtilization: Math.round(elu.utilization * 10_000) / 100,
       uptimeSeconds: Math.round(process.uptime()),
     };
-    void context.with(suppressTracing(context.active()), () => fetch(`${collectorUrl}/api/runtime`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(metrics),
-      signal: AbortSignal.timeout(2_000),
-    }).catch(() => undefined));
+    void context.with(suppressTracing(context.active()), () =>
+      fetch(`${collectorUrl}/api/runtime`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(metrics),
+        signal: AbortSignal.timeout(2_000),
+      }).catch(() => undefined),
+    );
     histogram.reset();
   }, 2_000);
   timer.unref();

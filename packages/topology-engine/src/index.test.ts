@@ -24,7 +24,13 @@ describe('TopologyEngine', () => {
       engine.ingest(spans);
     });
     const database = engine.snapshot().nodes.find((node) => node.type === 'database');
-    expect(database).toMatchObject({ requestCount: 5, errorCount: 1, errorRate: 20, avgLatencyMs: 22, p95LatencyMs: 100 });
+    expect(database).toMatchObject({
+      requestCount: 5,
+      errorCount: 1,
+      errorRate: 20,
+      avgLatencyMs: 22,
+      p95LatencyMs: 100,
+    });
     expect(percentile([40, 10, 30, 20], 0.95)).toBe(40);
   });
 
@@ -43,6 +49,48 @@ describe('TopologyEngine', () => {
     engine.ingest(trace('two', 2, 1));
     engine.ingest(trace('three', 3, 1));
     expect(engine.snapshot().traces.map((item) => item.id)).toEqual(['three', 'two']);
+  });
+
+  it('aggregates provider methods into one node while retaining method trace detail', () => {
+    const engine = new TopologyEngine();
+    engine.ingest([
+      providerSpan('a', 'validatePayment', 1),
+      providerSpan('b', 'calculateFees', 2),
+      providerSpan('c', 'processPayment', 3),
+    ]);
+
+    const snapshot = engine.snapshot();
+    const serviceNodes = snapshot.nodes.filter((node) => node.type === 'service');
+    expect(serviceNodes).toHaveLength(1);
+    expect(serviceNodes[0]).toMatchObject({ name: 'PaymentsService', requestCount: 3 });
+    expect(snapshot.traces.map((trace) => trace.spans[0]?.name)).toEqual([
+      'PaymentsService.processPayment',
+      'PaymentsService.calculateFees',
+      'PaymentsService.validatePayment',
+    ]);
+  });
+
+  it('keeps optional custom spans in trace detail without adding topology nodes', () => {
+    const engine = new TopologyEngine();
+    const route = trace('custom-detail', 1, 10)[0]!;
+    engine.ingest([
+      route,
+      {
+        traceId: route.traceId,
+        spanId: 'custom-span',
+        parentSpanId: route.spanId,
+        name: 'calculate-settlement',
+        kind: 'custom',
+        startTimeUnixMs: route.startTimeUnixMs + 1,
+        durationMs: 4,
+        status: 'ok',
+      },
+    ]);
+
+    const snapshot = engine.snapshot();
+    expect(snapshot.nodes).toHaveLength(1);
+    expect(snapshot.nodes[0]?.type).toBe('http-route');
+    expect(snapshot.traces[0]?.spans[0]?.children[0]?.name).toBe('calculate-settlement');
   });
 });
 
@@ -69,4 +117,21 @@ function trace(traceId: string, seed: number, databaseDuration: number): Telemet
       status: 'ok',
     },
   ];
+}
+
+function providerSpan(traceId: string, method: string, seed: number): TelemetrySpan {
+  return {
+    traceId,
+    spanId: `${traceId}-service`,
+    name: `PaymentsService.${method}`,
+    kind: 'service',
+    startTimeUnixMs: 1_700_000_000_000 + seed * 1_000,
+    durationMs: seed,
+    status: 'ok',
+    attributes: {
+      'nodescope.identity': 'service:PaymentsService',
+      'nodescope.class': 'PaymentsService',
+      'nodescope.method': method,
+    },
+  };
 }

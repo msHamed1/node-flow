@@ -8,7 +8,7 @@ export type TopologyNodeType =
   | 'worker'
   | 'external-http';
 
-export type TelemetrySpanKind = TopologyNodeType | 'internal';
+export type TelemetrySpanKind = TopologyNodeType | 'custom' | 'internal';
 
 export interface MetricSummary {
   requestCount: number;

@@ -54,6 +54,8 @@ const topologyKinds = new Set<TopologyNodeType>([
   'external-http',
 ]);
 
+const traceKinds = new Set([...topologyKinds, 'custom']);
+
 export class TopologyEngine {
   private readonly nodes = new Map<string, NodeState>();
   private readonly edges = new Map<string, EdgeState>();
@@ -152,14 +154,18 @@ export class TopologyEngine {
     if (!topologyKinds.has(span.kind as TopologyNodeType)) return undefined;
     const type = span.kind as TopologyNodeType;
     const identity = String(span.attributes?.['nodescope.identity'] ?? span.name);
+    const className = stringAttribute(span, 'nodescope.class');
+    const nodeName =
+      (type === 'controller' || type === 'service') && className ? className : span.name;
     const id = stableId(type, identity);
     let node = this.nodes.get(id);
     if (!node && create) {
       node = {
         id,
-        name: span.name,
+        name: nodeName,
         type,
-        operation: stringAttribute(span, 'nodescope.operation'),
+        operation:
+          stringAttribute(span, 'nodescope.method') ?? stringAttribute(span, 'nodescope.operation'),
         metrics: emptyMetrics(),
       };
       this.nodes.set(id, node);
@@ -203,7 +209,9 @@ export class TopologyEngine {
 
   private buildRecentTraces(): RecentTrace[] {
     return [...this.traces.values()]
-      .filter((trace) => [...trace.spans.values()].some((span) => topologyKinds.has(span.kind as TopologyNodeType)))
+      .filter((trace) =>
+        [...trace.spans.values()].some((span) => topologyKinds.has(span.kind as TopologyNodeType)),
+      )
       .sort((a, b) => b.lastUpdatedAt - a.lastUpdatedAt)
       .map((trace) => buildTrace(trace.spans));
   }
@@ -219,7 +227,7 @@ export function percentile(values: number[], percentileValue: number): number {
 function buildTrace(spans: Map<string, TelemetrySpan>): RecentTrace {
   const traceSpans = new Map<string, TraceSpan>();
   for (const span of spans.values()) {
-    if (topologyKinds.has(span.kind as TopologyNodeType)) {
+    if (traceKinds.has(span.kind)) {
       traceSpans.set(span.spanId, { ...span, children: [] });
     }
   }
@@ -232,7 +240,9 @@ function buildTrace(spans: Map<string, TelemetrySpan>): RecentTrace {
   }
   const orderedRoots = sortTraceSpans(roots);
   const earliest = Math.min(...[...spans.values()].map((span) => span.startTimeUnixMs));
-  const latest = Math.max(...[...spans.values()].map((span) => span.startTimeUnixMs + span.durationMs));
+  const latest = Math.max(
+    ...[...spans.values()].map((span) => span.startTimeUnixMs + span.durationMs),
+  );
   const root = orderedRoots[0];
   return {
     id: root?.traceId ?? '',
@@ -281,7 +291,13 @@ function summarize(metrics: MetricAccumulator): MetricSummary {
 }
 
 function toNode(node: NodeState): TopologyNode {
-  return { id: node.id, name: node.name, type: node.type, operation: node.operation, ...summarize(node.metrics) };
+  return {
+    id: node.id,
+    name: node.name,
+    type: node.type,
+    operation: node.operation,
+    ...summarize(node.metrics),
+  };
 }
 
 function toEdge(edge: EdgeState): TopologyEdge {
