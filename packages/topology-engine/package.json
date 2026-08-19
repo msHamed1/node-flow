@@ -1,5 +1,5 @@
 {
-  "name": "@node-flow/topology-engine",
+  "name": "@mshamed1/node-flow-topology-engine",
   "version": "0.1.0",
   "description": "In-memory runtime topology aggregation engine for NodeFlow.",
   "license": "Apache-2.0",
@@ -33,6 +33,6 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@node-flow/protocol": "0.1.0"
+    "@mshamed1/node-flow-protocol": "0.1.0"
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { TelemetrySpan } from '@node-flow/protocol';
+import type { TelemetrySpan } from '@mshamed1/node-flow-protocol';
 import { percentile, TopologyEngine } from './index.js';
 
 describe('TopologyEngine', () => {

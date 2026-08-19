@@ -1,1 +1,1 @@
-export * from '@node-flow/instrumentation-nestjs';
+export * from '@mshamed1/node-flow-instrumentation-nestjs';

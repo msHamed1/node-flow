@@ -2,7 +2,9 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
-const registerUrl = pathToFileURL(require.resolve('@node-flow/instrumentation-node/register')).href;
+const registerUrl = pathToFileURL(
+  require.resolve('@mshamed1/node-flow-instrumentation-node/register'),
+).href;
 
 export function createInstrumentedEnvironment(
   environment: NodeJS.ProcessEnv,

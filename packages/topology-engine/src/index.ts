@@ -8,7 +8,7 @@ import type {
   TopologyNodeType,
   TopologySnapshot,
   TraceSpan,
-} from '@node-flow/protocol';
+} from '@mshamed1/node-flow-protocol';
 
 interface MetricAccumulator {
   count: number;

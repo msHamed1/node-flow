@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { Body, Controller, Inject, Injectable, Module, Post } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { NodeFlowModule } from '@node-flow/node/nestjs';
+import { NodeFlowModule } from '@mshamed1/node-flow/nestjs';
 import {
   PAYMENTS_DATABASE,
   simulatedPostgresProvider,

@@ -53,7 +53,7 @@ for (const releasePackage of publishedPackages) {
       }
     }
 
-    if (releasePackage.name === '@node-flow/node') {
+    if (releasePackage.name === '@mshamed1/node-flow') {
       for (const required of [
         'README.md',
         'dist/cli.js',

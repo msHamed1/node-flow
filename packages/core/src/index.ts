@@ -1,5 +1,5 @@
 import { SpanStatusCode, trace, type Attributes } from '@opentelemetry/api';
-import type { TopologyNodeType } from '@node-flow/protocol';
+import type { TopologyNodeType } from '@mshamed1/node-flow-protocol';
 
 export interface BoundaryOptions {
   type: TopologyNodeType;

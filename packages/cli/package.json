@@ -1,5 +1,5 @@
 {
-  "name": "@node-flow/node",
+  "name": "@mshamed1/node-flow",
   "version": "0.1.0",
   "description": "Local-first runtime architecture explorer for Node.js and NestJS applications.",
   "license": "Apache-2.0",
@@ -35,10 +35,10 @@
     "clean": "rm -rf dist dashboard"
   },
   "dependencies": {
-    "@node-flow/collector": "0.1.0",
-    "@node-flow/core": "0.1.0",
-    "@node-flow/instrumentation-nestjs": "0.1.0",
-    "@node-flow/instrumentation-node": "0.1.0"
+    "@mshamed1/node-flow-collector": "0.1.0",
+    "@mshamed1/node-flow-core": "0.1.0",
+    "@mshamed1/node-flow-instrumentation-nestjs": "0.1.0",
+    "@mshamed1/node-flow-instrumentation-node": "0.1.0"
   },
   "repository": {
     "type": "git",

@@ -1,5 +1,5 @@
 {
-  "name": "@node-flow/dashboard",
+  "name": "@mshamed1/node-flow-dashboard",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@node-flow/protocol": "0.1.0",
+    "@mshamed1/node-flow-protocol": "0.1.0",
     "@xyflow/react": "^12.6.4",
     "lucide-react": "^0.468.0",
     "react": "^19.1.0",

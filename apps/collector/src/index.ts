@@ -9,8 +9,8 @@ import {
   type RuntimeMetrics,
   type SpanBatch,
   type TopologySnapshot,
-} from '@node-flow/protocol';
-import { TopologyEngine } from '@node-flow/topology-engine';
+} from '@mshamed1/node-flow-protocol';
+import { TopologyEngine } from '@mshamed1/node-flow-topology-engine';
 
 export interface CollectorOptions {
   host?: string;

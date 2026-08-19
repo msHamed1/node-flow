@@ -1,5 +1,5 @@
-# @node-flow/instrumentation-nestjs
+# @mshamed1/node-flow-instrumentation-nestjs
 
 NestJS controller and singleton-provider instrumentation used by
-[`@node-flow/node`](https://www.npmjs.com/package/@node-flow/node). Application developers should
-install the main package and import `NodeFlowModule` from `@node-flow/node/nestjs`.
+[`@mshamed1/node-flow`](https://www.npmjs.com/package/@mshamed1/node-flow). Application developers should
+install the main package and import `NodeFlowModule` from `@mshamed1/node-flow/nestjs`.

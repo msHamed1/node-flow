@@ -44,6 +44,9 @@ jobs:
       - name: Build
         run: yarn build
 
+      - name: Check npm scope migration
+        run: yarn scope:check
+
       - name: Lint
         run: yarn lint
 

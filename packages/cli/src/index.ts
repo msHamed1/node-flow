@@ -1,2 +1,2 @@
-export { nodeflow, span, traceBoundary, traceServiceOperation } from '@node-flow/core';
-export type { BoundaryOptions } from '@node-flow/core';
+export { nodeflow, span, traceBoundary, traceServiceOperation } from '@mshamed1/node-flow-core';
+export type { BoundaryOptions } from '@mshamed1/node-flow-core';

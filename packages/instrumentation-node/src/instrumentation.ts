@@ -15,7 +15,7 @@ import type {
   SpanBatch,
   TelemetrySpan,
   TelemetrySpanKind,
-} from '@node-flow/protocol';
+} from '@mshamed1/node-flow-protocol';
 
 let runningSdk: NodeSDK | undefined;
 

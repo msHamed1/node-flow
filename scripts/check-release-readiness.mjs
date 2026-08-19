@@ -60,19 +60,19 @@ if (licenses.size > 1) {
 for (const [packageName, manifest] of manifests) {
   for (const dependencyType of ['dependencies', 'optionalDependencies']) {
     for (const dependencyName of Object.keys(manifest[dependencyType] ?? {})) {
-      if (dependencyName.startsWith('@node-flow/') && !manifests.has(dependencyName)) {
+      if (dependencyName.startsWith('@mshamed1/node-flow') && !manifests.has(dependencyName)) {
         errors.push(`${packageName}: runtime dependency ${dependencyName} is not publishable`);
       }
     }
   }
 }
 
-const mainPackage = manifests.get('@node-flow/node');
+const mainPackage = manifests.get('@mshamed1/node-flow');
 if (mainPackage?.bin?.['node-flow'] !== './dist/cli.js') {
-  errors.push('@node-flow/node: node-flow CLI binary is missing or points to the wrong file');
+  errors.push('@mshamed1/node-flow: node-flow CLI binary is missing or points to the wrong file');
 }
 if (!mainPackage?.exports?.['./nestjs']) {
-  errors.push('@node-flow/node: ./nestjs export is missing');
+  errors.push('@mshamed1/node-flow: ./nestjs export is missing');
 }
 
 if (errors.length > 0) {

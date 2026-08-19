@@ -66,8 +66,8 @@ try {
   writeFileSync(
     join(consumerDirectory, 'consumer.mjs'),
     [
-      "import { nodeflow, traceBoundary } from '@node-flow/node';",
-      "import { NodeFlowModule } from '@node-flow/node/nestjs';",
+      "import { nodeflow, traceBoundary } from '@mshamed1/node-flow';",
+      "import { NodeFlowModule } from '@mshamed1/node-flow/nestjs';",
       '',
       "if (typeof nodeflow.span !== 'function') throw new Error('nodeflow.span export is missing');",
       "if (typeof traceBoundary !== 'function') throw new Error('traceBoundary export is missing');",
@@ -90,7 +90,7 @@ try {
 
   const installed = JSON.parse(
     readFileSync(
-      join(consumerDirectory, 'node_modules', '@node-flow', 'node', 'package.json'),
+      join(consumerDirectory, 'node_modules', '@mshamed1', 'node-flow', 'package.json'),
       'utf8',
     ),
   );

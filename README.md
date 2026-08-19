@@ -77,7 +77,7 @@ controller and provider boundaries and aggregates completed traces into a runtim
 NodeFlow is currently an MVP source preview and has not yet been published to npm. Its public
 package surface, transitive runtime packages, CLI binary, exports, bundled dashboard, package smoke
 tests, Changesets configuration, and npm trusted-publishing workflow are prepared for the
-`@node-flow` namespace.
+`@mshamed1` npm scope, with `@mshamed1/node-flow` as the primary package.
 
 NodeFlow is licensed under Apache License 2.0. See [RELEASE.md](./RELEASE.md) for the one-time npm
 bootstrap and the automated release process.
@@ -92,7 +92,7 @@ Requirements:
 Install one development dependency:
 
 ```bash
-npm install -D @node-flow/node
+npm install -D @mshamed1/node-flow
 ```
 
 ### 1. Register the NestJS integration
@@ -101,7 +101,7 @@ Import `NodeFlowModule` once in the root application module:
 
 ```ts
 import { Module } from '@nestjs/common';
-import { NodeFlowModule } from '@node-flow/node/nestjs';
+import { NodeFlowModule } from '@mshamed1/node-flow/nestjs';
 import { PaymentsModule } from './payments/payments.module';
 
 @Module({
@@ -215,7 +215,7 @@ unsupported clients.
 Use `nodeflow.span()` for trace detail that should not become a main topology node:
 
 ```ts
-import { nodeflow } from '@node-flow/node';
+import { nodeflow } from '@mshamed1/node-flow';
 
 return nodeflow.span('calculate-settlement', () => this.calculateSettlement(input));
 ```
@@ -223,7 +223,7 @@ return nodeflow.span('calculate-settlement', () => this.calculateSettlement(inpu
 Use `traceBoundary()` only when an unsupported client needs an explicit architectural boundary:
 
 ```ts
-import { traceBoundary } from '@node-flow/node';
+import { traceBoundary } from '@mshamed1/node-flow';
 
 return traceBoundary(
   {
@@ -274,7 +274,7 @@ NodeFlow works without configuration for the standard local setup. Filtering is 
 `forRoot()`:
 
 ```ts
-import { NodeFlowModule } from '@node-flow/node/nestjs';
+import { NodeFlowModule } from '@mshamed1/node-flow/nestjs';
 
 @Module({
   imports: [
@@ -315,20 +315,20 @@ The dashboard will be available at `http://127.0.0.1:7441`.
 
 ## NestJS monorepos
 
-Install `@node-flow/node` in the workspace that owns the NestJS application, import
+Install `@mshamed1/node-flow` in the workspace that owns the NestJS application, import
 `NodeFlowModule` in that application's root module, and launch that workspace through NodeFlow.
 
 For a Yarn Classic workspace named `@acme/payments-api`:
 
 ```bash
-yarn workspace @acme/payments-api add --dev @node-flow/node
+yarn workspace @acme/payments-api add --dev @mshamed1/node-flow
 yarn workspace @acme/payments-api node-flow dev -- yarn workspace @acme/payments-api start:dev
 ```
 
 For an npm workspace at `apps/payments-api`:
 
 ```bash
-npm install --save-dev @node-flow/node --workspace apps/payments-api
+npm install --save-dev @mshamed1/node-flow --workspace apps/payments-api
 cd apps/payments-api
 npx node-flow dev -- npm run start:dev
 ```
@@ -382,7 +382,7 @@ Confirm that:
 
 1. The application was started through `node-flow dev`.
 2. A real request was sent after NodeFlow started.
-3. `NodeFlowModule` from `@node-flow/node/nestjs` is imported by the root NestJS module.
+3. `NodeFlowModule` from `@mshamed1/node-flow/nestjs` is imported by the root NestJS module.
 4. The application process can reach `127.0.0.1:7331`.
 
 ### Routes and controllers appear, but services do not

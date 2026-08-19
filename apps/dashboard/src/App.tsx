@@ -38,7 +38,7 @@ import type {
   TopologyNodeType,
   TopologySnapshot,
   TraceSpan,
-} from '@node-flow/protocol';
+} from '@mshamed1/node-flow-protocol';
 
 const emptySnapshot: TopologySnapshot = {
   revision: 0,

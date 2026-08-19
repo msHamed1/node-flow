@@ -5,8 +5,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { nodeflow, span, traceBoundary } from '@node-flow/node';
-import { NodeFlowModule } from '@node-flow/node/nestjs';
+import { nodeflow, span, traceBoundary } from '@mshamed1/node-flow';
+import { NodeFlowModule } from '@mshamed1/node-flow/nestjs';
 import { createInstrumentedEnvironment, getNodeFlowPreloadUrl } from './child-environment.js';
 
 const executeFile = promisify(execFile);
@@ -17,7 +17,7 @@ describe('NodeFlow public package', () => {
     expect(traceBoundary).toBeTypeOf('function');
   });
 
-  it('exports the NestJS integration from @node-flow/node/nestjs', () => {
+  it('exports the NestJS integration from @mshamed1/node-flow/nestjs', () => {
     expect(NodeFlowModule).toBeTypeOf('function');
     expect(NodeFlowModule.forRoot).toBeTypeOf('function');
   });
@@ -27,14 +27,14 @@ describe('NodeFlow public package', () => {
       await readFile(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
     ) as { name: string; bin: Record<string, string> };
 
-    expect(manifest.name).toBe('@node-flow/node');
+    expect(manifest.name).toBe('@mshamed1/node-flow');
     expect(manifest.bin).toEqual({ 'node-flow': './dist/cli.js' });
   });
 
   it('resolves both public exports from an external-style consumer', async () => {
     const fixtureDirectory = await mkdtemp(join(tmpdir(), 'node-flow-consumer-'));
     const packageDirectory = fileURLToPath(new URL('..', import.meta.url));
-    const packageLink = join(fixtureDirectory, 'node_modules', '@node-flow', 'node');
+    const packageLink = join(fixtureDirectory, 'node_modules', '@mshamed1', 'node-flow');
 
     try {
       await mkdir(dirname(packageLink), { recursive: true });
@@ -42,8 +42,8 @@ describe('NodeFlow public package', () => {
       await writeFile(
         join(fixtureDirectory, 'consumer.mjs'),
         [
-          "import { nodeflow, traceBoundary } from '@node-flow/node';",
-          "import { NodeFlowModule } from '@node-flow/node/nestjs';",
+          "import { nodeflow, traceBoundary } from '@mshamed1/node-flow';",
+          "import { NodeFlowModule } from '@mshamed1/node-flow/nestjs';",
           "console.log(nodeflow.span === undefined ? 'missing' : 'root-ok');",
           'console.log(typeof traceBoundary, typeof NodeFlowModule);',
         ].join('\n'),
@@ -104,6 +104,6 @@ describe('NodeFlow public package', () => {
     );
 
     expect(demoSource).not.toMatch(/traceServiceOperation|traceBoundary|nodeflow\.span/);
-    expect(demoSource).toContain("from '@node-flow/node/nestjs'");
+    expect(demoSource).toContain("from '@mshamed1/node-flow/nestjs'");
   });
 });

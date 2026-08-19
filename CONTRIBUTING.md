@@ -35,20 +35,20 @@ yarn demo
 
 ## Repository layout
 
-| Path                              | Purpose                                               | Published               |
-| --------------------------------- | ----------------------------------------------------- | ----------------------- |
-| `packages/cli`                    | Main `@node-flow/node` package and `node-flow` binary | Yes                     |
-| `packages/core`                   | Optional custom span and boundary APIs                | Yes, runtime dependency |
-| `packages/instrumentation-node`   | Node.js preload and OpenTelemetry integration         | Yes, runtime dependency |
-| `packages/instrumentation-nestjs` | NestJS controller and provider integration            | Yes, runtime dependency |
-| `packages/protocol`               | Shared telemetry contracts                            | Yes, runtime dependency |
-| `packages/topology-engine`        | In-memory topology aggregation                        | Yes, runtime dependency |
-| `apps/collector`                  | Local collector and dashboard server                  | Yes, runtime dependency |
-| `apps/dashboard`                  | Dashboard source bundled into `@node-flow/node`       | No                      |
-| `apps/demo-nestjs`                | Local demonstration application                       | No                      |
+| Path                              | Purpose                                                   | Published               |
+| --------------------------------- | --------------------------------------------------------- | ----------------------- |
+| `packages/cli`                    | Main `@mshamed1/node-flow` package and `node-flow` binary | Yes                     |
+| `packages/core`                   | Optional custom span and boundary APIs                    | Yes, runtime dependency |
+| `packages/instrumentation-node`   | Node.js preload and OpenTelemetry integration             | Yes, runtime dependency |
+| `packages/instrumentation-nestjs` | NestJS controller and provider integration                | Yes, runtime dependency |
+| `packages/protocol`               | Shared telemetry contracts                                | Yes, runtime dependency |
+| `packages/topology-engine`        | In-memory topology aggregation                            | Yes, runtime dependency |
+| `apps/collector`                  | Local collector and dashboard server                      | Yes, runtime dependency |
+| `apps/dashboard`                  | Dashboard source bundled into `@mshamed1/node-flow`       | No                      |
+| `apps/demo-nestjs`                | Local demonstration application                           | No                      |
 
 The internal packages are published because the main package imports them at runtime; TypeScript
-does not bundle those dependencies into `@node-flow/node`.
+does not bundle those dependencies into `@mshamed1/node-flow`.
 
 ## Development checks
 

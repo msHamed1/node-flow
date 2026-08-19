@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { startCollector } from '@node-flow/collector';
+import { startCollector } from '@mshamed1/node-flow-collector';
 import { createInstrumentedEnvironment } from './child-environment.js';
 
 const args = process.argv.slice(2);

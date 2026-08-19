@@ -10,13 +10,13 @@ No package should be published while the release-readiness check fails.
 
 Packages are published in dependency order:
 
-1. `@node-flow/protocol`
-2. `@node-flow/topology-engine`
-3. `@node-flow/core`
-4. `@node-flow/instrumentation-node`
-5. `@node-flow/instrumentation-nestjs`
-6. `@node-flow/collector`
-7. `@node-flow/node`
+1. `@mshamed1/node-flow-protocol`
+2. `@mshamed1/node-flow-topology-engine`
+3. `@mshamed1/node-flow-core`
+4. `@mshamed1/node-flow-instrumentation-node`
+5. `@mshamed1/node-flow-instrumentation-nestjs`
+6. `@mshamed1/node-flow-collector`
+7. `@mshamed1/node-flow`
 
 The dashboard and demo workspaces remain private. The dashboard build is shipped inside the main
 package under `dashboard/`.
@@ -40,15 +40,15 @@ license metadata or files.
 
 npm trusted publishing cannot create a package that does not already exist on npm. The first
 version of each package must therefore be bootstrapped manually by an npm account allowed to create
-packages in the `@node-flow` organization.
+packages in the `@mshamed1` organization.
 
 ### 1. Confirm ownership and repository identity
 
 - Rename or create the GitHub repository as `msHamed1/node-flow`.
 - Confirm every public package has the exact repository URL
   `git+https://github.com/msHamed1/node-flow.git`.
-- Confirm the npm organization owns the `@node-flow` scope and the maintainer can create public
-  scoped packages.
+- Confirm the npm organization owns the `@mshamed1` scope and the maintainer can create public scoped
+  packages.
 - Enable two-factor authentication on the publishing npm account.
 
 ### 2. Finish and validate the release candidate
@@ -89,13 +89,13 @@ npm whoami
 Publish each package exactly once in dependency order:
 
 ```bash
-npm publish --workspace @node-flow/protocol --access public
-npm publish --workspace @node-flow/topology-engine --access public
-npm publish --workspace @node-flow/core --access public
-npm publish --workspace @node-flow/instrumentation-node --access public
-npm publish --workspace @node-flow/instrumentation-nestjs --access public
-npm publish --workspace @node-flow/collector --access public
-npm publish --workspace @node-flow/node --access public
+npm publish --workspace @mshamed1/node-flow-protocol --access public
+npm publish --workspace @mshamed1/node-flow-topology-engine --access public
+npm publish --workspace @mshamed1/node-flow-core --access public
+npm publish --workspace @mshamed1/node-flow-instrumentation-node --access public
+npm publish --workspace @mshamed1/node-flow-instrumentation-nestjs --access public
+npm publish --workspace @mshamed1/node-flow-collector --access public
+npm publish --workspace @mshamed1/node-flow --access public
 ```
 
 After every command, verify the package and version on npm before proceeding. If a dependency fails,
@@ -161,7 +161,7 @@ For every released package:
 - Confirm the expected version and `latest` dist-tag on npm.
 - Confirm the npm page displays provenance for the publication.
 - Confirm the Git tag and GitHub Release exist.
-- Install `@node-flow/node` in a new temporary NestJS application and run
+- Install `@mshamed1/node-flow` in a new temporary NestJS application and run
   `npx node-flow --help` before announcing the release.
 
 ## Failed automated release
@@ -169,8 +169,8 @@ For every released package:
 Package versions on npm are immutable. First determine which packages were published:
 
 ```bash
-npm view @node-flow/node versions --json
-npm view @node-flow/protocol versions --json
+npm view @mshamed1/node-flow versions --json
+npm view @mshamed1/node-flow-protocol versions --json
 ```
 
 Then:
@@ -203,7 +203,7 @@ When a version is unsafe or unusable but should remain available for dependency 
 clear deprecation message and publish a fixed patch:
 
 ```bash
-npm deprecate '@node-flow/node@0.1.1' 'Known issue: upgrade to 0.1.2 or newer.'
+npm deprecate '@mshamed1/node-flow@0.1.1' 'Known issue: upgrade to 0.1.2 or newer.'
 ```
 
 Deprecate affected internal package versions as well. Do not deprecate an entire package range when

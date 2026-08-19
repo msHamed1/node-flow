@@ -1,5 +1,5 @@
 {
-  "name": "@node-flow/demo-nestjs",
+  "name": "@mshamed1/node-flow-demo-nestjs",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -14,7 +14,7 @@
     "@nestjs/common": "^11.1.0",
     "@nestjs/core": "^11.1.0",
     "@nestjs/platform-express": "^11.1.0",
-    "@node-flow/node": "0.1.0",
+    "@mshamed1/node-flow": "0.1.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
   }

@@ -1,4 +1,4 @@
-import { traceBoundary } from '@node-flow/node';
+import { traceBoundary } from '@mshamed1/node-flow';
 
 export interface CreatePaymentInput {
   amount?: number;
