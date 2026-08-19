@@ -1,8 +1,7 @@
 node_modules/
-.pnpm-store/
 dist/
 .vite/
 coverage/
 *.tsbuildinfo
 .DS_Store
-pnpm-debug.log*
+yarn-error.log*

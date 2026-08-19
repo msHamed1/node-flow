@@ -12,11 +12,11 @@ It is not a static dependency diagram. A component appears only after it runs, a
 
 ## Quick start
 
-This repository currently ships the packages as a pnpm workspace.
+This repository ships as a Yarn workspace.
 
 ```bash
-pnpm install
-pnpm demo
+yarn install
+yarn demo
 ```
 
 Open [http://127.0.0.1:7331](http://127.0.0.1:7331), then generate traffic:
@@ -109,9 +109,9 @@ The Phase 1 demo and automated end-to-end verification focus on HTTP → NestJS 
 ## Development
 
 ```bash
-pnpm build
-pnpm test
-pnpm lint
+yarn build
+yarn test
+yarn lint
 ```
 
 The codebase uses strict TypeScript. Unit tests cover stable node/edge aggregation, averages, p95, errors, out-of-order correlation, and bounded trace retention. The collector integration test proves telemetry ingestion creates topology nodes and an edge.

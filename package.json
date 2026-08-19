@@ -2,14 +2,18 @@
   "name": "nodescope-workspace",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@11.19.0",
+  "packageManager": "yarn@1.22.22",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "build": "pnpm --filter @nodescope/protocol build && pnpm --filter @nodescope/topology-engine build && pnpm --filter @nodescope/core build && pnpm --filter @nodescope/instrumentation-node build && pnpm --filter @nodescope/instrumentation-nestjs build && pnpm --filter @nodescope/dashboard build && pnpm --filter @nodescope/collector build && pnpm --filter nodescope build && pnpm --filter @nodescope/demo-nestjs build",
+    "build": "yarn workspace @nodescope/protocol build && yarn workspace @nodescope/topology-engine build && yarn workspace @nodescope/core build && yarn workspace @nodescope/instrumentation-node build && yarn workspace @nodescope/instrumentation-nestjs build && yarn workspace @nodescope/dashboard build && yarn workspace @nodescope/collector build && yarn workspace nodescope build && yarn workspace @nodescope/demo-nestjs build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "pnpm -r lint",
-    "demo": "pnpm build && node packages/cli/dist/index.js dev -- node apps/demo-nestjs/dist/main.js",
-    "clean": "pnpm -r clean"
+    "lint": "yarn workspaces run lint",
+    "demo": "yarn build && node packages/cli/dist/index.js dev -- node apps/demo-nestjs/dist/main.js",
+    "clean": "yarn workspaces run clean"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

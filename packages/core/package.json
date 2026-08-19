@@ -12,7 +12,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@nodescope/protocol": "workspace:*",
+    "@nodescope/protocol": "0.1.0",
     "@opentelemetry/api": "^1.9.0"
   }
 }

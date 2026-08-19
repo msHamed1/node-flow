@@ -10,7 +10,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@nodescope/protocol": "workspace:*",
+    "@nodescope/protocol": "0.1.0",
     "@xyflow/react": "^12.6.4",
     "lucide-react": "^0.468.0",
     "react": "^19.1.0",

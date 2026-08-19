@@ -13,7 +13,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@nodescope/collector": "workspace:*",
-    "@nodescope/instrumentation-node": "workspace:*"
+    "@nodescope/collector": "0.1.0",
+    "@nodescope/instrumentation-node": "0.1.0"
   }
 }

@@ -15,8 +15,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@nodescope/protocol": "workspace:*",
-    "@nodescope/topology-engine": "workspace:*",
+    "@nodescope/protocol": "0.1.0",
+    "@nodescope/topology-engine": "0.1.0",
     "@types/express": "^5.0.1",
     "@types/ws": "^8.18.1",
     "express": "^5.1.0",
