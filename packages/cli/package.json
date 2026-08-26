@@ -1,6 +1,6 @@
 {
   "name": "@mshamed1/node-flow",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Local-first runtime architecture explorer for Node.js and NestJS applications.",
   "license": "Apache-2.0",
   "type": "module",
@@ -38,7 +38,7 @@
     "@mshamed1/node-flow-collector": "1.1.0",
     "@mshamed1/node-flow-core": "1.0.1",
     "@mshamed1/node-flow-instrumentation-nestjs": "1.0.0",
-    "@mshamed1/node-flow-instrumentation-node": "1.1.0",
+    "@mshamed1/node-flow-instrumentation-node": "1.1.1",
     "@mshamed1/node-flow-protocol": "1.1.0",
     "@mshamed1/node-flow-topology-engine": "1.1.0"
   },
