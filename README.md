@@ -589,7 +589,7 @@ operation produced NodeFlow telemetry and passed the automated topology/trace as
 | Outgoing HTTP  | Node.js `fetch`                                  | local mock risk service | Verified |
 
 The tested OpenTelemetry instrumentation versions are PostgreSQL 0.56.1, MongoDB 0.56.0,
-Mongoose 0.50.0, Redis 0.52.0, amqplib 0.50.0, and HTTP 0.203.0.
+Mongoose 0.50.0, Redis 0.52.0, amqplib 0.50.0, HTTP 0.203.0, Express 0.52.0, and Undici 0.14.0.
 
 Mongoose `create()` produces Mongoose `save` plus MongoDB driver `insert` spans, and `findById()` is
 reported as Mongoose `findOne`; the suite asserts those observed names. Mongoose and driver spans
@@ -621,7 +621,7 @@ instance properties are intentionally skipped to protect application behavior.
 
 ### The database does not appear
 
-Check whether the client is supported by OpenTelemetry Node auto-instrumentation. Use
+Check whether the client is one of NodeFlow's explicitly supported OpenTelemetry integrations. Use
 `traceBoundary()` only for an unsupported or custom client.
 
 ### Port 7331 is already in use

@@ -1,6 +1,13 @@
 import { context, SpanKind, SpanStatusCode } from '@opentelemetry/api';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { ExportResultCode, suppressTracing, type ExportResult } from '@opentelemetry/core';
+import { AmqplibInstrumentation } from '@opentelemetry/instrumentation-amqplib';
+import { ExpressInstrumentation } from '@opentelemetry/instrumentation-express';
+import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
+import { MongoDBInstrumentation } from '@opentelemetry/instrumentation-mongodb';
+import { MongooseInstrumentation } from '@opentelemetry/instrumentation-mongoose';
+import { PgInstrumentation } from '@opentelemetry/instrumentation-pg';
+import { RedisInstrumentation } from '@opentelemetry/instrumentation-redis';
+import { UndiciInstrumentation } from '@opentelemetry/instrumentation-undici';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import {
@@ -35,19 +42,7 @@ export function startNodeFlowInstrumentation(): NodeSDK {
         maxQueueSize: 512,
       }),
     ],
-    instrumentations: [
-      getNodeAutoInstrumentations({
-        '@opentelemetry/instrumentation-fs': { enabled: false },
-        '@opentelemetry/instrumentation-http': {
-          ignoreOutgoingRequestHook: (request) => {
-            const host =
-              typeof request === 'string' ? request : (request.hostname ?? request.host ?? '');
-            const path = typeof request === 'string' ? request : (request.path ?? '');
-            return `${host}${path}`.includes(new URL(collectorUrl).host);
-          },
-        },
-      }),
-    ],
+    instrumentations: createNodeFlowInstrumentations(collectorUrl),
   });
   sdk.start();
   runningSdk = sdk;
@@ -58,6 +53,29 @@ export function startNodeFlowInstrumentation(): NodeSDK {
   };
   process.once('beforeExit', shutdown);
   return sdk;
+}
+
+export function createNodeFlowInstrumentations(collectorUrl: string) {
+  const collectorHost = new URL(collectorUrl).host;
+  return [
+    new HttpInstrumentation({
+      ignoreOutgoingRequestHook: (request) => {
+        const host =
+          typeof request === 'string' ? request : (request.hostname ?? request.host ?? '');
+        const path = typeof request === 'string' ? request : (request.path ?? '');
+        return `${host}${path}`.includes(collectorHost);
+      },
+    }),
+    new ExpressInstrumentation(),
+    new UndiciInstrumentation({
+      ignoreRequestHook: (request) => new URL(request.origin).host === collectorHost,
+    }),
+    new MongoDBInstrumentation(),
+    new MongooseInstrumentation(),
+    new PgInstrumentation(),
+    new RedisInstrumentation(),
+    new AmqplibInstrumentation(),
+  ];
 }
 
 class LocalCollectorExporter implements SpanExporter {
