@@ -15,6 +15,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "demo": "yarn build && node packages/cli/dist/cli.js dev -- node apps/demo-nestjs/dist/main.js",
+    "demo:traffic": "node scripts/generate-demo-traffic.mjs",
     "clean": "yarn workspaces run clean",
     "changeset": "changeset",
     "version-packages": "changeset version",

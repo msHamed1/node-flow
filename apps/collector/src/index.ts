@@ -56,11 +56,17 @@ export async function startCollector(options: CollectorOptions = {}): Promise<Ru
     response.json({ ok: true, localOnly: true, version: '0.1.0' });
   });
   app.get(collectorPaths.snapshot, (_request, response) => response.json(engine.snapshot()));
+  app.get(collectorPaths.architecture, (_request, response) =>
+    response.json(engine.createSnapshot()),
+  );
   app.post(collectorPaths.spans, (request, response) => {
     const batch = request.body as Partial<SpanBatch>;
     if (!Array.isArray(batch.spans)) {
       response.status(400).json({ error: 'Expected a span batch.' });
       return;
+    }
+    if (typeof batch.serviceName === 'string') {
+      engine.registerApplication(batch.serviceName, batch.nodeVersion);
     }
     const snapshot = engine.ingest(batch.spans);
     broadcast(snapshot);

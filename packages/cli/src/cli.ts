@@ -4,12 +4,20 @@ import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startCollector, type RunningCollector } from '@mshamed1/node-flow-collector';
+import {
+  compareCommandHelp,
+  runCompareCommand,
+  runSnapshotCommand,
+  snapshotCommandHelp,
+} from './architecture-commands.js';
 import { createInstrumentedEnvironment } from './child-environment.js';
 
 const usage = [
   'Usage: node-flow dev -- <command> [args...]',
   '       node-flow collector',
   '       node-flow run -- <command> [args...]',
+  '       node-flow snapshot [--output <architecture.json>]',
+  '       node-flow compare <before.json> <after.json>',
 ].join('\n');
 
 const args = process.argv.slice(2);
@@ -19,6 +27,12 @@ if (mode === '--help' || mode === '-h') {
   console.log(usage);
 } else if (mode === 'collector') {
   await runCollector();
+} else if (mode === 'snapshot') {
+  if (isHelp(args[1])) console.log(snapshotCommandHelp);
+  else await runArchitectureCommand(() => runSnapshotCommand(args.slice(1)));
+} else if (mode === 'compare') {
+  if (isHelp(args[1])) console.log(compareCommandHelp);
+  else await runArchitectureCommand(() => runCompareCommand(args.slice(1)));
 } else if (mode === 'dev') {
   const command = resolveCommand(args);
   const collector = await startCliCollector();
@@ -37,6 +51,19 @@ if (mode === '--help' || mode === '-h') {
 } else {
   console.error(usage);
   process.exitCode = 1;
+}
+
+function isHelp(argument: string | undefined): boolean {
+  return argument === '--help' || argument === '-h';
+}
+
+async function runArchitectureCommand(command: () => Promise<unknown>): Promise<void> {
+  try {
+    await command();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  }
 }
 
 function resolveCommand(commandArgs: string[]): string[] {

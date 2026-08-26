@@ -69,6 +69,7 @@ class LocalCollectorExporter implements SpanExporter {
   export(spans: ReadableSpan[], callback: (result: ExportResult) => void): void {
     const batch: SpanBatch = {
       serviceName: this.serviceName,
+      nodeVersion: process.version,
       spans: spans.map(normalizeSpan),
     };
     void context.with(suppressTracing(context.active()), async () => {

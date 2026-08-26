@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TelemetrySpan } from '@mshamed1/node-flow-protocol';
-import { percentile, TopologyEngine } from './index.js';
+import { createStableNodeId, percentile, TopologyEngine } from './index.js';
 
 describe('TopologyEngine', () => {
   it('aggregates repeated nodes and edges using stable IDs', () => {
@@ -13,6 +13,46 @@ describe('TopologyEngine', () => {
     expect(snapshot.edges).toHaveLength(1);
     expect(snapshot.nodes.every((node) => node.requestCount === 100)).toBe(true);
     expect(snapshot.edges[0]?.requestCount).toBe(100);
+    expect(snapshot.nodes.map((node) => node.id)).toEqual([
+      'http-route:post-/payments',
+      'database:postgresql',
+    ]);
+  });
+
+  it('creates deterministic normalized semantic node identities', () => {
+    expect(createStableNodeId('service', 'service:PaymentsService', 'NestJS')).toBe(
+      'nestjs:service:paymentsservice',
+    );
+    expect(createStableNodeId('service', ' service:PAYMENTS service ', 'nestjs')).toBe(
+      'nestjs:service:payments-service',
+    );
+    expect(createStableNodeId('external-http', 'HTTPS://API.Stripe.com')).toBe(
+      'external-http:https://api.stripe.com',
+    );
+  });
+
+  it('keeps architecture identities stable across runs, span IDs, and startup order', () => {
+    const firstRun = new TopologyEngine();
+    const secondRun = new TopologyEngine();
+    firstRun.ingest(semanticArchitectureTrace('run-one'));
+    secondRun.ingest(semanticArchitectureTrace('run-two').reverse());
+
+    const first = firstRun.snapshot();
+    const second = secondRun.snapshot();
+    expect(first.nodes.map((node) => node.id).sort()).toEqual([
+      'database:mongodb',
+      'external-http:risk.example.com',
+      'nestjs:controller:paymentscontroller',
+      'nestjs:service:paymentsservice',
+      'queue:rabbitmq',
+      'redis:redis',
+    ]);
+    expect(second.nodes.map((node) => node.id).sort()).toEqual(
+      first.nodes.map((node) => node.id).sort(),
+    );
+    expect(second.edges.map((edge) => edge.id).sort()).toEqual(
+      first.edges.map((edge) => edge.id).sort(),
+    );
   });
 
   it('calculates average, errors, error rate, and p95 latency', () => {
@@ -109,6 +149,58 @@ describe('TopologyEngine', () => {
     expect(snapshot.nodes[0]?.type).toBe('http-route');
     expect(snapshot.traces[0]?.spans[0]?.children[0]?.name).toBe('calculate-settlement');
   });
+
+  it('aggregates repeated equivalent runtime paths without retaining every trace', () => {
+    const engine = new TopologyEngine({ maxRecentTraces: 1 });
+    for (let request = 0; request < 5; request += 1) {
+      engine.ingest(trace(`path-${request}`, request, request + 1));
+    }
+
+    const snapshot = engine.snapshot();
+    expect(snapshot.traces).toHaveLength(1);
+    expect(snapshot.paths ?? []).toEqual([
+      expect.objectContaining({
+        entrypoint: 'POST /payments',
+        nodes: ['http-route:post-/payments', 'database:postgresql'],
+        calls: 5,
+        errors: 0,
+      }),
+    ]);
+  });
+
+  it('reconciles a provisional path when its HTTP parent arrives later', () => {
+    const engine = new TopologyEngine();
+    const spans = lateParentTrace();
+    engine.ingest(spans.slice(1));
+    expect(engine.snapshot().paths?.[0]?.entrypoint).toBe('PaymentsController.create');
+
+    engine.ingest([spans[0]!]);
+    expect(engine.snapshot().paths).toEqual([
+      expect.objectContaining({
+        entrypoint: 'POST /payments',
+        nodes: [
+          'http-route:post-/payments',
+          'nestjs:controller:paymentscontroller',
+          'nestjs:service:paymentsservice',
+          'database:postgresql',
+        ],
+        calls: 1,
+      }),
+    ]);
+  });
+
+  it('creates a derived architecture snapshot without raw traces', () => {
+    const engine = new TopologyEngine({ applicationName: 'payments-api', nodeVersion: 'v22.1.0' });
+    engine.ingest(trace('snapshot', 1, 8));
+
+    const snapshot = engine.createSnapshot();
+    expect(snapshot).toMatchObject({
+      version: '1.0',
+      application: { name: 'payments-api', runtime: 'nodejs', nodeVersion: 'v22.1.0' },
+    });
+    expect(snapshot.nodes[0]?.metrics).toHaveProperty('p99DurationMs');
+    expect(snapshot).not.toHaveProperty('traces');
+  });
 });
 
 function trace(traceId: string, seed: number, databaseDuration: number): TelemetrySpan[] {
@@ -168,4 +260,113 @@ function databaseOperationSpan(traceId: string, operation: string): TelemetrySpa
       'nodeflow.operation': operation,
     },
   };
+}
+
+function semanticArchitectureTrace(run: string): TelemetrySpan[] {
+  const base = {
+    traceId: `${run}-trace`,
+    startTimeUnixMs: 1_700_000_000_000,
+    durationMs: 10,
+    status: 'ok' as const,
+  };
+  const component = (
+    suffix: string,
+    parentSuffix: string | undefined,
+    name: string,
+    kind: TelemetrySpan['kind'],
+    identity: string,
+    framework?: string,
+  ): TelemetrySpan => ({
+    ...base,
+    spanId: `${run}-${suffix}`,
+    ...(parentSuffix ? { parentSpanId: `${run}-${parentSuffix}` } : {}),
+    name,
+    kind,
+    attributes: {
+      'nodeflow.identity': identity,
+      ...(framework ? { 'nodeflow.framework': framework } : {}),
+    },
+  });
+  return [
+    component(
+      'controller',
+      undefined,
+      'PaymentsController',
+      'controller',
+      'controller:PaymentsController',
+      'nestjs',
+    ),
+    component(
+      'service',
+      'controller',
+      'PaymentsService',
+      'service',
+      'service:PaymentsService',
+      'nestjs',
+    ),
+    component('mongodb', 'service', 'MongoDB', 'database', 'database:MongoDB'),
+    component('redis', 'service', 'Redis', 'redis', 'redis:Redis'),
+    component('rabbitmq', 'service', 'RabbitMQ', 'queue', 'queue:RabbitMQ'),
+    component(
+      'external',
+      'service',
+      'risk.example.com',
+      'external-http',
+      'external-http:risk.example.com',
+    ),
+  ];
+}
+
+function lateParentTrace(): TelemetrySpan[] {
+  const startTimeUnixMs = 1_700_000_000_000;
+  return [
+    {
+      traceId: 'late-parent',
+      spanId: 'route',
+      name: 'POST /payments',
+      kind: 'http-route',
+      startTimeUnixMs,
+      durationMs: 30,
+      status: 'ok',
+    },
+    {
+      traceId: 'late-parent',
+      spanId: 'controller',
+      parentSpanId: 'route',
+      name: 'PaymentsController.create',
+      kind: 'controller',
+      startTimeUnixMs: startTimeUnixMs + 1,
+      durationMs: 25,
+      status: 'ok',
+      attributes: {
+        'nodeflow.identity': 'controller:PaymentsController',
+        'nodeflow.framework': 'nestjs',
+      },
+    },
+    {
+      traceId: 'late-parent',
+      spanId: 'service',
+      parentSpanId: 'controller',
+      name: 'PaymentsService.createPayment',
+      kind: 'service',
+      startTimeUnixMs: startTimeUnixMs + 2,
+      durationMs: 20,
+      status: 'ok',
+      attributes: {
+        'nodeflow.identity': 'service:PaymentsService',
+        'nodeflow.framework': 'nestjs',
+      },
+    },
+    {
+      traceId: 'late-parent',
+      spanId: 'database',
+      parentSpanId: 'service',
+      name: 'PostgreSQL',
+      kind: 'database',
+      startTimeUnixMs: startTimeUnixMs + 3,
+      durationMs: 15,
+      status: 'ok',
+      attributes: { 'nodeflow.identity': 'database:PostgreSQL' },
+    },
+  ];
 }

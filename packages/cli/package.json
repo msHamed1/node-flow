@@ -38,7 +38,9 @@
     "@mshamed1/node-flow-collector": "0.1.0",
     "@mshamed1/node-flow-core": "0.1.0",
     "@mshamed1/node-flow-instrumentation-nestjs": "0.1.0",
-    "@mshamed1/node-flow-instrumentation-node": "0.1.0"
+    "@mshamed1/node-flow-instrumentation-node": "0.1.0",
+    "@mshamed1/node-flow-protocol": "0.1.0",
+    "@mshamed1/node-flow-topology-engine": "0.1.0"
   },
   "repository": {
     "type": "git",

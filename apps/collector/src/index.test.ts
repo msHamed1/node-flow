@@ -42,5 +42,22 @@ describe('collector integration', () => {
     )) as { nodes: unknown[]; edges: unknown[] };
     expect(snapshot.nodes).toHaveLength(2);
     expect(snapshot.edges).toHaveLength(1);
+
+    const architecture = (await fetch(`${collector.url}/api/architecture`).then((result) =>
+      result.json(),
+    )) as {
+      version: string;
+      application: { name?: string };
+      nodes: unknown[];
+      paths: unknown[];
+      traces?: unknown[];
+    };
+    expect(architecture).toMatchObject({
+      version: '1.0',
+      application: { name: 'integration-test' },
+    });
+    expect(architecture.nodes).toHaveLength(2);
+    expect(architecture.paths).toHaveLength(1);
+    expect(architecture.traces).toBeUndefined();
   });
 });
