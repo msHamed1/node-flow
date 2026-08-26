@@ -1,5 +1,12 @@
 # @mshamed1/node-flow-instrumentation-node
 
+## 1.1.1
+
+### Patch Changes
+
+- [`17d956f`](https://github.com/msHamed1/node-flow/commit/17d956fedb48824ab9b287d7eca3962e1754a2d8) Thanks [@msHamed1](https://github.com/msHamed1)! - Replace the broad Node auto-instrumentation bundle with the explicit HTTP, Express, Undici,
+  MongoDB, Mongoose, PostgreSQL, Redis, and amqplib integrations that NodeFlow supports.
+
 ## 1.1.0
 
 ### Minor Changes
