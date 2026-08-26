@@ -11,10 +11,8 @@ POST /payments
 PaymentsController
       ↓
 PaymentsService
-     ↙              ↘
-Redis             PostgreSQL
-                       ↓
-                   RabbitMQ
+   ↙             ↘
+MongoDB       RabbitMQ
 ```
 
 NodeFlow is not a static dependency diagram. Components appear only after they execute. Repeated
@@ -33,6 +31,38 @@ NodeFlow: runtime telemetry → semantic components → executed dependencies �
 > **No business-function wrappers required.** No NodeFlow decorators, initialization calls, manual
 > OpenTelemetry configuration, or tracing calls are required in normal controller and service
 > code.
+
+## Quick Start
+
+Requirements: Node.js 20 or newer and an existing Node.js or NestJS application.
+
+Install NodeFlow as a development dependency:
+
+```bash
+npm install -D @mshamed1/node-flow
+```
+
+NestJS applications should import `NodeFlowModule` once in the root module so the graph can show
+semantic controllers and providers:
+
+```ts
+import { Module } from '@nestjs/common';
+import { NodeFlowModule } from '@mshamed1/node-flow/nestjs';
+
+@Module({ imports: [NodeFlowModule] })
+export class AppModule {}
+```
+
+Start the application through NodeFlow using the same development command you already run:
+
+```bash
+npx node-flow dev -- npm run start:dev
+```
+
+Open [http://127.0.0.1:7331](http://127.0.0.1:7331), then use the application normally or send a
+request with `curl`. The graph is derived from the routes, controllers, providers, databases,
+caches, queues, and external services that actually execute. Telemetry stays in memory on your
+machine and is not uploaded.
 
 ## What NodeFlow helps you understand
 
@@ -85,12 +115,13 @@ developer's normal command. The preload initializes OpenTelemetry before applica
 loaded. OpenTelemetry instruments supported infrastructure clients, while NodeFlow adds semantic
 controller and provider boundaries and aggregates completed traces into a runtime map.
 
-## Release status
+## Release and compatibility
 
-NodeFlow is currently an MVP source preview and has not yet been published to npm. Its public
-package surface, transitive runtime packages, CLI binary, exports, bundled dashboard, package smoke
-tests, Changesets configuration, and npm trusted-publishing workflow are prepared for the
-`@mshamed1` npm scope, with `@mshamed1/node-flow` as the primary package.
+The current stable npm release is
+[`@mshamed1/node-flow@1.0.0`](https://www.npmjs.com/package/@mshamed1/node-flow). NodeFlow requires
+Node.js 20 or newer. Its public package surface, transitive runtime packages, CLI binary, exports,
+bundled dashboard, package smoke tests, Changesets configuration, and npm trusted-publishing
+workflow use the `@mshamed1` npm scope, with `@mshamed1/node-flow` as the primary package.
 
 NodeFlow is licensed under Apache License 2.0. See [RELEASE.md](./RELEASE.md) for the one-time npm
 bootstrap and the automated release process.
@@ -225,7 +256,7 @@ Keep `node-flow dev` running, exercise the application, and create a snapshot fr
 terminal:
 
 ```bash
-node-flow snapshot --output before.json
+npx node-flow snapshot --output before.json
 ```
 
 The command asks the active local collector for its derived architecture. Snapshot files contain
@@ -237,8 +268,8 @@ After changing the application, restart NodeFlow, generate representative traffi
 the new architecture:
 
 ```bash
-node-flow snapshot --output after.json
-node-flow compare before.json after.json
+npx node-flow snapshot --output after.json
+npx node-flow compare before.json after.json
 ```
 
 The comparison separates structural changes from meaningful runtime metric changes. Reordered JSON
@@ -367,7 +398,7 @@ Example:
 ```bash
 NODEFLOW_PORT=7441 \
 NODEFLOW_SERVICE_NAME=payments-api \
-node-flow dev -- npm run start:dev
+npx node-flow dev -- npm run start:dev
 ```
 
 The dashboard will be available at `http://127.0.0.1:7441`.
@@ -397,10 +428,10 @@ owns one application and collector. For several local services, start a shared c
 each instrumented process at it:
 
 ```bash
-node-flow collector
+npx node-flow collector
 NODEFLOW_COLLECTOR_URL=http://127.0.0.1:7331 \
 NODEFLOW_SERVICE_NAME=payments-api \
-node-flow run -- yarn workspace @acme/payments-api start:dev
+npx node-flow run -- yarn workspace @acme/payments-api start:dev
 ```
 
 Repeat the `run` command with a distinct service name for each local process. This is the same
@@ -412,7 +443,7 @@ NestJS instantiates them in the `api` container. NodeFlow follows executed runti
 the physical workspace directory that contains a provider.
 
 Local `api`, `worker`, and `admin-api` processes can send telemetry to one collector. Explicit
-service-group nodes and multi-host collection remain outside the current MVP.
+service-group nodes and multi-host collection remain outside the current release.
 
 ## Try the included demo
 
@@ -596,18 +627,19 @@ Check whether the client is supported by OpenTelemetry Node auto-instrumentation
 ### Port 7331 is already in use
 
 ```bash
-NODEFLOW_PORT=7441 node-flow dev -- npm run start:dev
+NODEFLOW_PORT=7441 npx node-flow dev -- npm run start:dev
 ```
 
 ### No telemetry arrives
 
 ```bash
-NODEFLOW_DEBUG=1 node-flow dev -- npm run start:dev
+NODEFLOW_DEBUG=1 npx node-flow dev -- npm run start:dev
 ```
 
-## Current MVP limitations
+## Current limitations
 
-- The npm packages are configured but not yet published.
+- The current package set is published under the `@mshamed1` npm scope; this repository's pending
+  Changeset controls the next release.
 - One `NodeFlowModule` import remains required because NestJS has no public preload-to-container
   discovery hook.
 - State is process-local and cleared on restart.
@@ -644,7 +676,7 @@ Use `yarn format` to apply Prettier. Contributors should read [CONTRIBUTING.md](
 add a Changeset for user-visible package changes. Maintainers should follow [RELEASE.md](./RELEASE.md)
 for first publication, trusted-publisher setup, recovery, prereleases, deprecation, and rollback.
 
-The repository is prepared for `github.com/msHamed1/node-flow` and uses Yarn Classic 1.22 for
+The repository is hosted at `github.com/msHamed1/node-flow` and uses Yarn Classic 1.22 for
 workspace dependency management.
 
 ## Release process

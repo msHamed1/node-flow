@@ -38,6 +38,9 @@ license metadata or files.
 
 ## One-time first publication
 
+This bootstrap has been completed for the current package set. Keep these steps only as a reference
+for adding a new public package or recovering a first-publication failure.
+
 npm trusted publishing cannot create a package that does not already exist on npm. The first
 version of each package must therefore be bootstrapped manually by an npm account allowed to create
 packages in the `@mshamed1` organization.

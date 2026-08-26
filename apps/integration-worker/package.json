@@ -10,7 +10,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@mshamed1/node-flow": "0.1.0",
+    "@mshamed1/node-flow": "1.0.0",
     "@mshamed1/node-flow-integration-contracts": "0.1.0",
     "@nestjs/common": "^11.1.0",
     "@nestjs/core": "^11.1.0",
