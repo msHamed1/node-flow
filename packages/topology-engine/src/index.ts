@@ -1,6 +1,9 @@
 import type {
+  ArchitectureNode,
   MetricSummary,
+  NodeFlowSnapshot,
   RecentTrace,
+  RuntimePath,
   RuntimeMetrics,
   TelemetrySpan,
   TopologyEdge,
@@ -9,6 +12,7 @@ import type {
   TopologySnapshot,
   TraceSpan,
 } from '@mshamed1/node-flow-protocol';
+import { SNAPSHOT_VERSION } from './snapshot.js';
 
 interface MetricAccumulator {
   count: number;
@@ -21,8 +25,17 @@ interface NodeState {
   id: string;
   name: string;
   type: TopologyNodeType;
+  framework?: string;
   operation?: string;
   metrics: MetricAccumulator;
+}
+
+interface RuntimePathState {
+  id: string;
+  entrypoint: string;
+  nodes: string[];
+  metrics: MetricAccumulator;
+  lastUpdatedAt: number;
 }
 
 interface EdgeState {
@@ -36,11 +49,15 @@ interface TraceState {
   traceId: string;
   spans: Map<string, TelemetrySpan>;
   lastUpdatedAt: number;
+  pathContributions: Map<string, { durationMs: number; failed: boolean }>;
 }
 
 export interface TopologyEngineOptions {
   maxRecentTraces?: number;
   maxLatencySamples?: number;
+  maxRuntimePaths?: number;
+  applicationName?: string;
+  nodeVersion?: string;
 }
 
 const topologyKinds = new Set<TopologyNodeType>([
@@ -59,11 +76,15 @@ const traceKinds = new Set([...topologyKinds, 'custom']);
 export class TopologyEngine {
   private readonly nodes = new Map<string, NodeState>();
   private readonly edges = new Map<string, EdgeState>();
+  private readonly paths = new Map<string, RuntimePathState>();
   private readonly traces = new Map<string, TraceState>();
   private readonly seenSpanIds = new Set<string>();
   private readonly seenEdgeSpanIds = new Set<string>();
   private readonly maxRecentTraces: number;
   private readonly maxLatencySamples: number;
+  private readonly maxRuntimePaths: number;
+  private readonly applicationNames = new Set<string>();
+  private nodeVersion: string;
   private runtime?: RuntimeMetrics;
   private revision = 0;
   private traceClock = 0;
@@ -72,6 +93,14 @@ export class TopologyEngine {
   constructor(options: TopologyEngineOptions = {}) {
     this.maxRecentTraces = options.maxRecentTraces ?? 50;
     this.maxLatencySamples = options.maxLatencySamples ?? 1_000;
+    this.maxRuntimePaths = options.maxRuntimePaths ?? 1_000;
+    this.nodeVersion = options.nodeVersion ?? process.version;
+    if (options.applicationName) this.applicationNames.add(options.applicationName);
+  }
+
+  registerApplication(name: string, nodeVersion?: string): void {
+    if (name.trim()) this.applicationNames.add(name.trim());
+    if (nodeVersion?.trim()) this.nodeVersion = nodeVersion.trim();
   }
 
   ingest(spans: TelemetrySpan[]): TopologySnapshot {
@@ -86,6 +115,7 @@ export class TopologyEngine {
         traceId: span.traceId,
         spans: new Map<string, TelemetrySpan>(),
         lastUpdatedAt: 0,
+        pathContributions: new Map(),
       };
       trace.spans.set(span.spanId, span);
       trace.lastUpdatedAt = ++this.traceClock;
@@ -111,7 +141,7 @@ export class TopologyEngine {
         const parentNode = this.findNearestParentNode(trace, child.parentSpanId);
         const childNode = this.resolveNode(child, false);
         if (!parentNode || !childNode || parentNode.id === childNode.id) continue;
-        const edgeId = stableId('edge', `${parentNode.id}->${childNode.id}`);
+        const edgeId = createStableEdgeId(parentNode.id, childNode.id);
         const edge: EdgeState = this.edges.get(edgeId) ?? {
           id: edgeId,
           source: parentNode.id,
@@ -123,6 +153,11 @@ export class TopologyEngine {
         this.seenEdgeSpanIds.add(edgeSpanKey);
         activeEdgeIds.add(edgeId);
       }
+    }
+
+    for (const traceId of touchedTraceIds) {
+      const trace = this.traces.get(traceId);
+      if (trace) this.aggregateRuntimePaths(trace);
     }
 
     this.trimTraces();
@@ -143,10 +178,38 @@ export class TopologyEngine {
       revision: this.revision,
       generatedAt: Date.now(),
       nodes: [...this.nodes.values()].map(toNode).sort((a, b) => a.name.localeCompare(b.name)),
-      edges: [...this.edges.values()].map(toEdge),
+      edges: [...this.edges.values()].map(toEdge).sort((a, b) => a.id.localeCompare(b.id)),
+      paths: this.buildRuntimePaths(),
       traces: this.buildRecentTraces(),
       runtime: this.runtime,
       activity: this.activity,
+    };
+  }
+
+  createSnapshot(): NodeFlowSnapshot {
+    const applicationNames = [...this.applicationNames].sort();
+    return {
+      version: SNAPSHOT_VERSION,
+      generatedAt: new Date().toISOString(),
+      application: {
+        ...(applicationNames[0] ? { name: applicationNames[0] } : {}),
+        runtime: 'nodejs',
+        nodeVersion: this.nodeVersion,
+      },
+      nodes: [...this.nodes.values()]
+        .map(toArchitectureNode)
+        .sort((a, b) => a.id.localeCompare(b.id)),
+      edges: [...this.edges.values()]
+        .map((edge) => ({
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          type: 'runtime-dependency',
+          metrics: toArchitectureEdgeMetrics(edge.metrics),
+        }))
+        .sort((a, b) => a.id.localeCompare(b.id)),
+      paths: this.buildRuntimePaths(),
+      ...(applicationNames.length > 1 ? { metadata: { serviceNames: applicationNames } } : {}),
     };
   }
 
@@ -155,17 +218,19 @@ export class TopologyEngine {
     const type = span.kind as TopologyNodeType;
     const identity = String(span.attributes?.['nodeflow.identity'] ?? span.name);
     const className = stringAttribute(span, 'nodeflow.class');
+    const framework = stringAttribute(span, 'nodeflow.framework');
     const nodeName =
       (type === 'controller' || type === 'service') && className
         ? className
         : (stringAttribute(span, 'nodeflow.topology_name') ?? span.name);
-    const id = stableId(type, identity);
+    const id = createStableNodeId(type, identity, framework);
     let node = this.nodes.get(id);
     if (!node && create) {
       node = {
         id,
         name: nodeName,
         type,
+        framework,
         operation:
           stringAttribute(span, 'nodeflow.method') ?? stringAttribute(span, 'nodeflow.operation'),
         metrics: emptyMetrics(),
@@ -193,6 +258,117 @@ export class TopologyEngine {
     metrics.totalLatencyMs += durationMs;
     metrics.latencies.push(durationMs);
     if (metrics.latencies.length > this.maxLatencySamples) metrics.latencies.shift();
+  }
+
+  private aggregateRuntimePaths(trace: TraceState): void {
+    const recentTrace = buildTrace(trace.spans);
+    const entrypointRoots = recentTrace.spans.filter(
+      (span) =>
+        span.nodeId &&
+        (span.kind === 'http-route' ||
+          span.kind === 'worker' ||
+          span.kind === 'controller' ||
+          span.kind === 'service'),
+    );
+    if (entrypointRoots.length === 0) return;
+
+    const uniquePaths = new Map<string, { entrypoint: string; nodes: string[] }>();
+    for (const root of entrypointRoots) {
+      for (const nodes of collectNodePaths(root)) {
+        if (nodes.length === 0) continue;
+        uniquePaths.set(nodes.join('>'), { entrypoint: root.name, nodes });
+      }
+    }
+
+    const failed = recentTrace.status === 'error';
+    const desired = new Map<
+      string,
+      { path: { entrypoint: string; nodes: string[] }; durationMs: number; failed: boolean }
+    >();
+    for (const path of uniquePaths.values()) {
+      desired.set(createStablePathId(path.entrypoint, path.nodes), {
+        path,
+        durationMs: recentTrace.durationMs,
+        failed,
+      });
+    }
+
+    for (const [pathId, contribution] of trace.pathContributions) {
+      const next = desired.get(pathId);
+      if (
+        next &&
+        next.durationMs === contribution.durationMs &&
+        next.failed === contribution.failed
+      ) {
+        continue;
+      }
+      const state = this.paths.get(pathId);
+      if (!state) continue;
+      this.removeRecord(state.metrics, contribution.durationMs, contribution.failed);
+      if (state.metrics.count === 0) this.paths.delete(pathId);
+    }
+
+    const nextContributions = new Map<string, { durationMs: number; failed: boolean }>();
+    for (const [id, contribution] of desired) {
+      nextContributions.set(id, {
+        durationMs: contribution.durationMs,
+        failed: contribution.failed,
+      });
+      const previous = trace.pathContributions.get(id);
+      if (
+        previous &&
+        previous.durationMs === contribution.durationMs &&
+        previous.failed === contribution.failed &&
+        this.paths.has(id)
+      ) {
+        continue;
+      }
+      let state = this.paths.get(id);
+      if (!state) {
+        if (this.paths.size >= this.maxRuntimePaths) this.removeLeastUsefulPath();
+        state = {
+          id,
+          entrypoint: contribution.path.entrypoint,
+          nodes: contribution.path.nodes,
+          metrics: emptyMetrics(),
+          lastUpdatedAt: 0,
+        };
+        this.paths.set(id, state);
+      }
+      this.record(state.metrics, contribution.durationMs, contribution.failed);
+      state.lastUpdatedAt = ++this.traceClock;
+    }
+    trace.pathContributions = nextContributions;
+  }
+
+  private removeRecord(metrics: MetricAccumulator, durationMs: number, failed: boolean): void {
+    metrics.count = Math.max(0, metrics.count - 1);
+    metrics.errors = Math.max(0, metrics.errors - (failed ? 1 : 0));
+    metrics.totalLatencyMs = Math.max(0, metrics.totalLatencyMs - durationMs);
+    const sampleIndex = metrics.latencies.indexOf(durationMs);
+    if (sampleIndex >= 0) metrics.latencies.splice(sampleIndex, 1);
+  }
+
+  private removeLeastUsefulPath(): void {
+    const candidate = [...this.paths.values()].sort(
+      (a, b) => a.metrics.count - b.metrics.count || a.lastUpdatedAt - b.lastUpdatedAt,
+    )[0];
+    if (candidate) this.paths.delete(candidate.id);
+  }
+
+  private buildRuntimePaths(): RuntimePath[] {
+    return [...this.paths.values()]
+      .map((path) => ({
+        id: path.id,
+        entrypoint: path.entrypoint,
+        nodes: [...path.nodes],
+        calls: path.metrics.count,
+        avgDurationMs:
+          path.metrics.count === 0 ? 0 : round(path.metrics.totalLatencyMs / path.metrics.count),
+        p95DurationMs: percentile(path.metrics.latencies, 0.95),
+        errors: path.metrics.errors,
+      }))
+      .sort((a, b) => b.calls - a.calls || a.id.localeCompare(b.id));
   }
 
   private trimTraces(): void {
@@ -230,7 +406,19 @@ function buildTrace(spans: Map<string, TelemetrySpan>): RecentTrace {
   const traceSpans = new Map<string, TraceSpan>();
   for (const span of spans.values()) {
     if (traceKinds.has(span.kind)) {
-      traceSpans.set(span.spanId, { ...span, children: [] });
+      traceSpans.set(span.spanId, {
+        ...span,
+        ...(topologyKinds.has(span.kind as TopologyNodeType)
+          ? {
+              nodeId: createStableNodeId(
+                span.kind as TopologyNodeType,
+                String(span.attributes?.['nodeflow.identity'] ?? span.name),
+                stringAttribute(span, 'nodeflow.framework'),
+              ),
+            }
+          : {}),
+        children: [],
+      });
     }
   }
 
@@ -278,6 +466,13 @@ function sortTraceSpans(spans: TraceSpan[]): TraceSpan[] {
     .map((span) => ({ ...span, children: sortTraceSpans(span.children) }));
 }
 
+function collectNodePaths(span: TraceSpan, parentNodes: string[] = []): string[][] {
+  const nodes = [...parentNodes];
+  if (span.nodeId && nodes.at(-1) !== span.nodeId) nodes.push(span.nodeId);
+  if (span.children.length === 0) return [nodes];
+  return span.children.flatMap((child) => collectNodePaths(child, nodes));
+}
+
 function emptyMetrics(): MetricAccumulator {
   return { count: 0, errors: 0, totalLatencyMs: 0, latencies: [] };
 }
@@ -288,7 +483,9 @@ function summarize(metrics: MetricAccumulator): MetricSummary {
     errorCount: metrics.errors,
     errorRate: metrics.count === 0 ? 0 : round((metrics.errors / metrics.count) * 100),
     avgLatencyMs: metrics.count === 0 ? 0 : round(metrics.totalLatencyMs / metrics.count),
+    p50LatencyMs: percentile(metrics.latencies, 0.5),
     p95LatencyMs: percentile(metrics.latencies, 0.95),
+    p99LatencyMs: percentile(metrics.latencies, 0.99),
   };
 }
 
@@ -297,8 +494,51 @@ function toNode(node: NodeState): TopologyNode {
     id: node.id,
     name: node.name,
     type: node.type,
+    framework: node.framework,
     operation: node.operation,
     ...summarize(node.metrics),
+  };
+}
+
+function toArchitectureNode(node: NodeState): ArchitectureNode {
+  return {
+    id: node.id,
+    type: toArchitectureNodeType(node.type),
+    name: node.name,
+    framework: node.framework,
+    metrics: {
+      callCount: node.metrics.count,
+      errorCount: node.metrics.errors,
+      avgDurationMs:
+        node.metrics.count === 0 ? 0 : round(node.metrics.totalLatencyMs / node.metrics.count),
+      p50DurationMs: percentile(node.metrics.latencies, 0.5),
+      p95DurationMs: percentile(node.metrics.latencies, 0.95),
+      p99DurationMs: percentile(node.metrics.latencies, 0.99),
+    },
+  };
+}
+
+function toArchitectureNodeType(type: TopologyNodeType): ArchitectureNode['type'] {
+  return {
+    'http-route': 'http',
+    controller: 'controller',
+    service: 'service',
+    database: 'database',
+    redis: 'cache',
+    queue: 'queue',
+    worker: 'provider',
+    'external-http': 'external-service',
+  }[type] as ArchitectureNode['type'];
+}
+
+function toArchitectureEdgeMetrics(
+  metrics: MetricAccumulator,
+): NonNullable<import('@mshamed1/node-flow-protocol').ArchitectureEdge['metrics']> {
+  return {
+    callCount: metrics.count,
+    errorCount: metrics.errors,
+    avgDurationMs: metrics.count === 0 ? 0 : round(metrics.totalLatencyMs / metrics.count),
+    p95DurationMs: percentile(metrics.latencies, 0.95),
   };
 }
 
@@ -311,7 +551,50 @@ function stringAttribute(span: TelemetrySpan, key: string): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-function stableId(prefix: string, value: string): string {
+export function normalizeSemanticIdentity(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .split(':')
+    .map((part) =>
+      part
+        .trim()
+        .replace(/[^a-z0-9._/-]+/g, '-')
+        .replace(/^-+|-+$/g, ''),
+    )
+    .filter(Boolean)
+    .join(':');
+}
+
+export function createStableNodeId(
+  type: TopologyNodeType,
+  identity: string,
+  framework?: string,
+): string {
+  const normalizedType = normalizeSemanticIdentity(type);
+  let normalizedIdentity = normalizeSemanticIdentity(identity) || 'unknown';
+  if (
+    normalizedIdentity !== normalizedType &&
+    !normalizedIdentity.startsWith(`${normalizedType}:`)
+  ) {
+    normalizedIdentity = `${normalizedType}:${normalizedIdentity}`;
+  }
+  const normalizedFramework = framework ? normalizeSemanticIdentity(framework) : '';
+  if (normalizedFramework && !normalizedIdentity.startsWith(`${normalizedFramework}:`)) {
+    normalizedIdentity = `${normalizedFramework}:${normalizedIdentity}`;
+  }
+  return normalizedIdentity;
+}
+
+export function createStableEdgeId(source: string, target: string): string {
+  return `dependency:${source}->${target}`;
+}
+
+function createStablePathId(entrypoint: string, nodes: string[]): string {
+  return stableHash('path', `${normalizeSemanticIdentity(entrypoint)}:${nodes.join('>')}`);
+}
+
+function stableHash(prefix: string, value: string): string {
   let hash = 2_166_136_261;
   for (let index = 0; index < value.length; index += 1) {
     hash ^= value.charCodeAt(index);
@@ -323,3 +606,5 @@ function stableId(prefix: string, value: string): string {
 function round(value: number): number {
   return Math.round(value * 100) / 100;
 }
+
+export * from './snapshot.js';

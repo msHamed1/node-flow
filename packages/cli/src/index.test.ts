@@ -97,6 +97,17 @@ describe('NodeFlow public package', () => {
     expect(stdout).toMatch(/CHILD_COLLECTOR=http:\/\/127\.0\.0\.1:\d+/);
   }, 15_000);
 
+  it('shows successful command-specific help for snapshot and compare', async () => {
+    const cliPath = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
+    const snapshot = await executeFile(process.execPath, [cliPath, 'snapshot', '--help']);
+    const compare = await executeFile(process.execPath, [cliPath, 'compare', '--help']);
+
+    expect(snapshot.stderr).toBe('');
+    expect(snapshot.stdout).toContain('Usage: node-flow snapshot');
+    expect(compare.stderr).toBe('');
+    expect(compare.stdout).toContain('Usage: node-flow compare');
+  });
+
   it('keeps mandatory instrumentation calls out of demo business code', async () => {
     const demoSource = await readFile(
       fileURLToPath(new URL('../../../apps/demo-nestjs/src/main.ts', import.meta.url)),

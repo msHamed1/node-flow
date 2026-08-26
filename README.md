@@ -1,6 +1,6 @@
 # NodeFlow
 
-**See how your Node.js application actually flows.**
+**See your Node.js architecture execute in real time.**
 
 NodeFlow is a local-first runtime architecture explorer for Node.js and NestJS applications. It
 captures real application traffic and turns executed runtime paths into a live architecture map.
@@ -20,6 +20,16 @@ Redis             PostgreSQL
 NodeFlow is not a static dependency diagram. Components appear only after they execute. Repeated
 requests update the metrics on the same nodes and connections instead of creating duplicates.
 
+NodeFlow is designed primarily for understanding application architecture during development. The
+architecture graph is the product: raw OpenTelemetry spans are normalized into components,
+executed dependencies, and aggregated runtime paths.
+
+```text
+Traditional observability: request → trace → span → latency
+
+NodeFlow: runtime telemetry → semantic components → executed dependencies → runtime architecture
+```
+
 > **No business-function wrappers required.** No NodeFlow decorators, initialization calls, manual
 > OpenTelemetry configuration, or tracing calls are required in normal controller and service
 > code.
@@ -34,16 +44,19 @@ NodeFlow gives developers a visual answer to questions such as:
 - Where did an error happen?
 - How often is a route or dependency used?
 - What did one individual request do from start to finish?
+- What architecture changed after this refactor?
 
-The local dashboard includes:
+The graph-first local dashboard includes:
 
-- A live runtime topology graph
-- Request and error counts
-- Average and p95 latency
-- Error rate
+- Semantic entrypoint, application, service, and infrastructure layers
+- Architecture, traffic, latency, and error perspectives over the same graph
+- Runtime-path selection with dimmed or hidden unrelated components
+- Search across component names, types, entrypoints, and external services
+- Navigable inbound and outbound dependencies with meaningful traffic shares
+- Compact architecture and infrastructure summaries
+- Conservative, deterministic topology observations
+- Local before/after snapshot comparison with added, removed, and changed markers
 - Recent request traces and architectural waterfalls
-- Process memory, CPU, event-loop utilization, and uptime
-- Node details and connected dependencies
 
 ## Local-first and private
 
@@ -205,6 +218,50 @@ to configure `NODE_OPTIONS` themselves.
 
 Open [http://127.0.0.1:7331](http://127.0.0.1:7331), then use the application normally or generate
 traffic with integration tests and `curl`. Only executed components appear.
+
+## Save and compare runtime architectures
+
+Keep `node-flow dev` running, exercise the application, and create a snapshot from a second
+terminal:
+
+```bash
+node-flow snapshot --output before.json
+```
+
+The command asks the active local collector for its derived architecture. Snapshot files contain
+normalized nodes, executed dependencies, aggregate metrics, and repeated runtime paths; they do not
+contain raw spans or recent trace waterfalls. With no `--output`, NodeFlow writes
+`node-flow.snapshot.json` in the current directory.
+
+After changing the application, restart NodeFlow, generate representative traffic again, and save
+the new architecture:
+
+```bash
+node-flow snapshot --output after.json
+node-flow compare before.json after.json
+```
+
+The comparison separates structural changes from meaningful runtime metric changes. Reordered JSON
+arrays do not create false differences, and small timing drift is suppressed by conservative
+thresholds. New external services and substantial latency increases are warnings; NodeFlow does not
+claim critical business impact from topology alone.
+
+Snapshots use schema version `1.0`. Component identity is deterministic and semantic rather than
+span- or process-based. Examples include:
+
+```text
+nestjs:controller:paymentscontroller
+nestjs:service:paymentsservice
+database:postgresql
+redis:redis
+external-http:api.stripe.com
+```
+
+Identity values are trimmed, lowercased, normalized, and prefixed with the framework where that
+semantic context exists. Edge identity derives only from the source and target component IDs. This
+makes snapshots stable across startup order, process IDs, trace IDs, and JSON array order. Custom
+`traceBoundary()` integrations should continue to use stable identities without request-specific
+values.
 
 ## Optional custom spans
 
@@ -369,22 +426,29 @@ yarn demo
 NodeFlow starts the demo on `http://127.0.0.1:3000` and the runtime map on
 `http://127.0.0.1:7331`.
 
-Create a payment:
+In a second terminal, generate representative traffic for all demo flows:
 
 ```bash
-curl -X POST http://127.0.0.1:3000/payments \
-  -H 'content-type: application/json' \
-  -d '{"amount":125,"currency":"USD"}'
+yarn demo:traffic
 ```
 
-The dashboard will show:
+The script executes 26 real HTTP requests. The dashboard will show three runtime paths:
 
 ```text
-POST /payments → PaymentsController → PaymentsService → PostgreSQL
+POST /auth/login → AuthController → AuthService → Redis
+
+POST /payments → PaymentsController → PaymentsService
+                                            ├─ MongoDB
+                                            └─ RabbitMQ
+
+POST /orders → OrdersController → OrdersService
+                                      ├─ PostgreSQL
+                                      └─ InventoryService → inventory.example.local
 ```
 
-The demo simulates PostgreSQL through optional `traceBoundary()` so Docker is not required. Its
-controller and service contain no tracing calls.
+The demo uses optional `traceBoundary()` adapters to simulate infrastructure latency so Docker is
+not required. The graph still results from real executed HTTP traffic and exported spans; no
+topology is inserted directly. Controllers and services contain no tracing calls.
 
 ## Real integration demo
 
@@ -553,6 +617,11 @@ NODEFLOW_DEBUG=1 node-flow dev -- npm run start:dev
   NodeFlow providers are skipped.
 - Several local processes can share one collector, but explicit service-group topology nodes are
   not yet modeled.
+- Runtime paths expose reliable end-to-end request timing. The telemetry model does not yet store
+  exclusive per-component path duration, so the explorer lists participating components without
+  claiming component timings or summing nested span duration.
+- Snapshot comparison runs entirely in the browser and requires selecting two local version `1.0`
+  JSON files; snapshots are not persisted by the dashboard.
 - Verified integration versions are intentionally narrow; other client and framework versions need
   separate compatibility runs before they are documented as verified.
 
