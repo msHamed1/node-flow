@@ -1,5 +1,12 @@
 # NodeFlow
 
+[![Build, tests, and integration](https://img.shields.io/github/actions/workflow/status/msHamed1/node-flow/release.yml?branch=main&label=build%20%7C%20tests%20%7C%20integration)](https://github.com/msHamed1/node-flow/actions/workflows/release.yml)
+[![PR checks](https://github.com/msHamed1/node-flow/actions/workflows/ci.yml/badge.svg)](https://github.com/msHamed1/node-flow/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/@mshamed1/node-flow)](https://www.npmjs.com/package/@mshamed1/node-flow)
+[![npm downloads](https://img.shields.io/npm/dm/@mshamed1/node-flow)](https://www.npmjs.com/package/@mshamed1/node-flow)
+[![Node.js](https://img.shields.io/node/v/@mshamed1/node-flow)](https://www.npmjs.com/package/@mshamed1/node-flow)
+[![License](https://img.shields.io/npm/l/@mshamed1/node-flow)](./LICENSE)
+
 **See your Node.js architecture execute in real time.**
 
 NodeFlow is a local-first runtime architecture explorer for Node.js and NestJS applications. It
