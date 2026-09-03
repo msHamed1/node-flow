@@ -122,6 +122,31 @@ developer's normal command. The preload initializes OpenTelemetry before applica
 loaded. OpenTelemetry instruments supported infrastructure clients, while NodeFlow adds semantic
 controller and provider boundaries and aggregates completed traces into a runtime map.
 
+### NodeFlow V2 Go collector
+
+V2 introduces an opt-in Go ingestion service without rewriting NodeFlow or moving Node.js-specific
+instrumentation out of TypeScript:
+
+```mermaid
+flowchart LR
+    App[Node.js or NestJS application] --> TS[TypeScript instrumentation]
+    TS -->|nodeflow.v1 Protobuf| Go[Go collector]
+    Go -->|bounded batches| Engine[TypeScript topology engine]
+    Engine --> API[Snapshot and runtime API]
+    API --> Dashboard[React dashboard]
+```
+
+Go owns the runtime-neutral infrastructure boundary: validation, bounded admission, batching,
+fixed worker concurrency, backpressure, graceful shutdown, and collector metrics. TypeScript
+continues to own Node.js/OpenTelemetry integration, NestJS discovery, semantic topology
+reconstruction, snapshots, and the dashboard. The existing TypeScript collector remains the npm
+CLI default while V2 parity and distribution mature.
+
+The preferred V2 wire format is Protocol Buffers, while the existing JSON ingestion endpoints stay
+available for compatibility. See [the V2 architecture](./docs/architecture-v2.md),
+[migration design](./docs/migrations/collector-go-v2.md), and
+[Go collector runbook](./services/collector/README.md).
+
 ## Release and compatibility
 
 The current stable npm release is
@@ -392,13 +417,14 @@ filename is `nodeflow.config.ts`.
 
 ## Environment variables
 
-| Environment variable     | Default                  | Purpose                                     |
-| ------------------------ | ------------------------ | ------------------------------------------- |
-| `NODEFLOW_PORT`          | `7331`                   | Collector and dashboard port                |
-| `NODEFLOW_HOST`          | `127.0.0.1`              | Collector bind host                         |
-| `NODEFLOW_COLLECTOR_URL` | `http://127.0.0.1:7331`  | Shared collector used by `node-flow run`    |
-| `NODEFLOW_SERVICE_NAME`  | Application package name | Name reported by the instrumented process   |
-| `NODEFLOW_DEBUG`         | Disabled                 | Set to `1` to log telemetry export failures |
+| Environment variable       | Default                  | Purpose                                     |
+| -------------------------- | ------------------------ | ------------------------------------------- |
+| `NODEFLOW_PORT`            | `7331`                   | Collector and dashboard port                |
+| `NODEFLOW_HOST`            | `127.0.0.1`              | Collector bind host                         |
+| `NODEFLOW_COLLECTOR_URL`   | `http://127.0.0.1:7331`  | Shared collector used by `node-flow run`    |
+| `NODEFLOW_SERVICE_NAME`    | Application package name | Name reported by the instrumented process   |
+| `NODEFLOW_DEBUG`           | Disabled                 | Set to `1` to log telemetry export failures |
+| `NODEFLOW_EXPORT_PROTOCOL` | `json`                   | Use `protobuf` with the V2 Go collector     |
 
 Example:
 
@@ -492,8 +518,9 @@ topology is inserted directly. Controllers and services contain no tracing calls
 
 The Docker integration lab validates the package against actual infrastructure and the same public
 surface an external NestJS application uses. It starts PostgreSQL, MongoDB, Redis, RabbitMQ, a
-NestJS API, a NestJS queue worker, a local risk service, and one shared NodeFlow
-collector/dashboard.
+NestJS API, a NestJS queue worker, a local risk service, the V2 Go collector, and the existing
+TypeScript topology/dashboard process. Instrumentation uses Protobuf through the Go boundary in
+this environment.
 
 Start the complete environment from the repository root:
 
@@ -505,6 +532,7 @@ This runs `docker compose up -d --build --wait`. When it completes, open:
 
 - API: [http://127.0.0.1:3000](http://127.0.0.1:3000)
 - NodeFlow dashboard: [http://127.0.0.1:7331](http://127.0.0.1:7331)
+- Go collector metrics: [http://127.0.0.1:4318/metrics](http://127.0.0.1:4318/metrics)
 - RabbitMQ management: [http://127.0.0.1:15672](http://127.0.0.1:15672)
 
 RabbitMQ uses the demo-only username and password `nodeflow`. All local defaults are documented in
