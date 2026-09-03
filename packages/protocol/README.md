@@ -3,6 +3,10 @@
 Shared TypeScript contracts for telemetry, live topology, architecture snapshots, runtime metrics,
 and collector messages across NodeFlow packages.
 
+The V2 protocol also provides a dependency-light TypeScript Protobuf codec. The language-neutral
+schemas live under `proto/nodeflow/v1`; checked-in Go bindings are generated into
+`services/collector/gen/nodeflow/v1`.
+
 This package contains types and endpoint constants, not runtime processing. It is published so the
 NodeFlow package graph can be installed from npm without copying contracts between the
 instrumentation, collector, topology engine, CLI, and dashboard.
@@ -14,8 +18,8 @@ Application developers should normally depend on
 
 ```text
 instrumentation-node
-  ├─ SpanBatch ────────────────> collector
-  └─ RuntimeMetrics ───────────> collector
+  ├─ TelemetryEnvelope/SpanBatch ─────> collector
+  └─ TelemetryEnvelope/RuntimeMetrics ─> collector
 
 collector + topology-engine
   ├─ TopologySnapshot ─────────> live dashboard / WebSocket
@@ -62,6 +66,17 @@ runtime paths, application metadata, and a schema version.
 | `architecture` | `/api/architecture` | Return the derived architecture    |
 | `health`       | `/api/health`       | Collector health check             |
 | `websocket`    | `/ws`               | Push live collector messages       |
+
+The additional `protobufTelemetry` path is `/v1/telemetry`. Encode a versioned envelope with
+`encodeTelemetryEnvelope()` and `Content-Type: application/x-protobuf`; use
+`decodeTelemetryEnvelope()` for TypeScript readers. The legacy JSON paths remain supported.
+
+Regenerate Go bindings after editing a schema:
+
+```bash
+go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10
+yarn proto:generate
+```
 
 ## Type usage
 

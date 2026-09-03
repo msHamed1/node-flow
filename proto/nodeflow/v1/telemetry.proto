@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package nodeflow.v1;
+
+option go_package = "github.com/msHamed1/node-flow/services/collector/gen/nodeflow/v1;nodeflowv1";
+
+// The version is carried in every envelope so incompatible readers can reject
+// before accepting work. Additive changes retain the 1.x protocol line.
+message TelemetryEnvelope {
+  string protocol_version = 1;
+
+  oneof payload {
+    SpanBatch span_batch = 2;
+    RuntimeMetrics runtime_metrics = 3;
+  }
+}
+
+message SpanBatch {
+  string service_name = 1;
+  string node_version = 2;
+  repeated TelemetrySpan spans = 3;
+}
+
+message TelemetrySpan {
+  string trace_id = 1;
+  string span_id = 2;
+  string parent_span_id = 3;
+  string name = 4;
+  SpanKind kind = 5;
+  double start_time_unix_ms = 6;
+  double duration_ms = 7;
+  SpanStatus status = 8;
+  map<string, AttributeValue> attributes = 9;
+}
+
+enum SpanKind {
+  SPAN_KIND_UNSPECIFIED = 0;
+  SPAN_KIND_HTTP_ROUTE = 1;
+  SPAN_KIND_CONTROLLER = 2;
+  SPAN_KIND_SERVICE = 3;
+  SPAN_KIND_DATABASE = 4;
+  SPAN_KIND_REDIS = 5;
+  SPAN_KIND_QUEUE = 6;
+  SPAN_KIND_WORKER = 7;
+  SPAN_KIND_EXTERNAL_HTTP = 8;
+  SPAN_KIND_CUSTOM = 9;
+  SPAN_KIND_INTERNAL = 10;
+}
+
+enum SpanStatus {
+  SPAN_STATUS_UNSPECIFIED = 0;
+  SPAN_STATUS_OK = 1;
+  SPAN_STATUS_ERROR = 2;
+}
+
+message AttributeValue {
+  oneof value {
+    string string_value = 1;
+    double number_value = 2;
+    bool bool_value = 3;
+  }
+}
+
+message RuntimeMetrics {
+  double timestamp_unix_ms = 1;
+  string service_name = 2;
+  uint64 rss_bytes = 3;
+  uint64 heap_used_bytes = 4;
+  uint64 heap_total_bytes = 5;
+  double cpu_percent = 6;
+  double event_loop_utilization = 7;
+  double uptime_seconds = 8;
+}
+
