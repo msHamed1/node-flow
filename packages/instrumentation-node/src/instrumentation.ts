@@ -23,6 +23,11 @@ import type {
   TelemetrySpan,
   TelemetrySpanKind,
 } from '@mshamed1/node-flow-protocol';
+import {
+  collectorPaths,
+  encodeTelemetryEnvelope,
+  NODEFLOW_PROTOCOL_VERSION,
+} from '@mshamed1/node-flow-protocol';
 
 let runningSdk: NodeSDK | undefined;
 
@@ -32,7 +37,8 @@ export function startNodeFlowInstrumentation(): NodeSDK {
   const collectorUrl = process.env.NODEFLOW_COLLECTOR_URL ?? 'http://127.0.0.1:7331';
   const serviceName =
     process.env.NODEFLOW_SERVICE_NAME ?? process.env.npm_package_name ?? 'node-application';
-  const exporter = new LocalCollectorExporter(collectorUrl, serviceName);
+  const exportProtocol = resolveExportProtocol(process.env.NODEFLOW_EXPORT_PROTOCOL);
+  const exporter = new LocalCollectorExporter(collectorUrl, serviceName, exportProtocol);
   const sdk = new NodeSDK({
     resource: resourceFromAttributes({ [ATTR_SERVICE_NAME]: serviceName }),
     spanProcessors: [
@@ -46,7 +52,7 @@ export function startNodeFlowInstrumentation(): NodeSDK {
   });
   sdk.start();
   runningSdk = sdk;
-  startRuntimeMetrics(collectorUrl, serviceName);
+  startRuntimeMetrics(collectorUrl, serviceName, exportProtocol);
 
   const shutdown = (): void => {
     void sdk.shutdown();
@@ -82,6 +88,7 @@ class LocalCollectorExporter implements SpanExporter {
   constructor(
     private readonly collectorUrl: string,
     private readonly serviceName: string,
+    private readonly exportProtocol: ExportProtocol,
   ) {}
 
   export(spans: ReadableSpan[], callback: (result: ExportResult) => void): void {
@@ -92,10 +99,11 @@ class LocalCollectorExporter implements SpanExporter {
     };
     void context.with(suppressTracing(context.active()), async () => {
       try {
-        const response = await fetch(`${this.collectorUrl}/api/spans`, {
+        const request = spanRequest(batch, this.exportProtocol);
+        const response = await fetch(`${this.collectorUrl}${request.path}`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(batch),
+          headers: { 'content-type': request.contentType },
+          body: request.body,
           signal: AbortSignal.timeout(2_000),
         });
         callback({ code: response.ok ? ExportResultCode.SUCCESS : ExportResultCode.FAILED });
@@ -116,11 +124,12 @@ class LocalCollectorExporter implements SpanExporter {
 }
 
 function normalizeSpan(span: ReadableSpan): TelemetrySpan {
-  const attributes: Record<string, string | number | boolean> = {};
+  const rawAttributes: Record<string, string | number | boolean> = {};
   for (const [key, value] of Object.entries(span.attributes)) {
     if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
-      attributes[key] = value;
+      rawAttributes[key] = value;
   }
+  const attributes = sanitizeAttributes(rawAttributes);
   const kind = resolveKind(span, attributes);
   const topologyName = resolveName(span, kind, attributes);
   const keepsOperationName =
@@ -225,7 +234,11 @@ function titleCase(value: string): string {
   return value.length === 0 ? value : value[0]!.toUpperCase() + value.slice(1);
 }
 
-function startRuntimeMetrics(collectorUrl: string, serviceName: string): void {
+function startRuntimeMetrics(
+  collectorUrl: string,
+  serviceName: string,
+  exportProtocol: ExportProtocol,
+): void {
   const histogram = monitorEventLoopDelay({ resolution: 20 });
   histogram.enable();
   let previousCpu = process.cpuUsage();
@@ -251,15 +264,133 @@ function startRuntimeMetrics(collectorUrl: string, serviceName: string): void {
       eventLoopUtilization: Math.round(elu.utilization * 10_000) / 100,
       uptimeSeconds: Math.round(process.uptime()),
     };
+    const request = runtimeRequest(metrics, exportProtocol);
     void context.with(suppressTracing(context.active()), () =>
-      fetch(`${collectorUrl}/api/runtime`, {
+      fetch(`${collectorUrl}${request.path}`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(metrics),
+        headers: { 'content-type': request.contentType },
+        body: request.body,
         signal: AbortSignal.timeout(2_000),
       }).catch(() => undefined),
     );
     histogram.reset();
   }, 2_000);
   timer.unref();
+}
+
+type ExportProtocol = 'json' | 'protobuf';
+
+interface CollectorRequest {
+  path: string;
+  contentType: string;
+  body: string | ArrayBuffer;
+}
+
+function resolveExportProtocol(value: string | undefined): ExportProtocol {
+  return value?.toLowerCase() === 'protobuf' ? 'protobuf' : 'json';
+}
+
+function spanRequest(batch: SpanBatch, protocol: ExportProtocol): CollectorRequest {
+  if (protocol === 'protobuf') {
+    return {
+      path: collectorPaths.protobufTelemetry,
+      contentType: 'application/x-protobuf',
+      body: protobufBody({
+        protocolVersion: NODEFLOW_PROTOCOL_VERSION,
+        spanBatch: batch,
+      }),
+    };
+  }
+  return {
+    path: collectorPaths.spans,
+    contentType: 'application/json',
+    body: JSON.stringify(batch),
+  };
+}
+
+function runtimeRequest(metrics: RuntimeMetrics, protocol: ExportProtocol): CollectorRequest {
+  if (protocol === 'protobuf') {
+    return {
+      path: collectorPaths.protobufTelemetry,
+      contentType: 'application/x-protobuf',
+      body: protobufBody({
+        protocolVersion: NODEFLOW_PROTOCOL_VERSION,
+        runtimeMetrics: metrics,
+      }),
+    };
+  }
+  return {
+    path: collectorPaths.runtime,
+    contentType: 'application/json',
+    body: JSON.stringify(metrics),
+  };
+}
+
+const sensitiveAttributeFragments = new Set([
+  'authorization',
+  'cookie',
+  'set_cookie',
+  'password',
+  'passwd',
+  'secret',
+  'token',
+  'access_token',
+  'refresh_token',
+  'api_key',
+  'client_secret',
+  'request_body',
+  'response_body',
+  'message_body',
+  'message_payload',
+  'db_statement',
+  'query_text',
+  'connection_string',
+  'dsn',
+  'url_query',
+]);
+
+/** Remove credential and payload attributes before telemetry leaves the application process. */
+export function sanitizeAttributes(
+  attributes: Record<string, string | number | boolean>,
+): Record<string, string | number | boolean> {
+  const sanitized: Record<string, string | number | boolean> = {};
+  for (const [key, value] of Object.entries(attributes)) {
+    if (isSensitiveAttributeKey(key)) continue;
+    sanitized[key] = typeof value === 'string' ? sanitizeURLAttribute(key, value) : value;
+  }
+  return sanitized;
+}
+
+function isSensitiveAttributeKey(key: string): boolean {
+  const normalized = key.toLowerCase().replace(/[.\-/]+/g, '_');
+  const fragments = normalized.split('_').filter(Boolean);
+  if (fragments.some((fragment) => sensitiveAttributeFragments.has(fragment))) return true;
+  return [...sensitiveAttributeFragments].some(
+    (fragment) =>
+      normalized === fragment ||
+      normalized.endsWith(`_${fragment}`) ||
+      normalized.includes(`_${fragment}_`),
+  );
+}
+
+function sanitizeURLAttribute(key: string, value: string): string {
+  const normalized = key.toLowerCase();
+  if (normalized !== 'url.full' && normalized !== 'http.url') return value;
+  try {
+    const url = new URL(value);
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return '[REDACTED]';
+  }
+}
+
+function protobufBody(envelope: Parameters<typeof encodeTelemetryEnvelope>[0]): ArrayBuffer {
+  const encoded = encodeTelemetryEnvelope(envelope);
+  const body = new ArrayBuffer(encoded.byteLength);
+  new Uint8Array(body).set(encoded);
+  return body;
 }

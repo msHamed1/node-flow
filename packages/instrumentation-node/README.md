@@ -100,11 +100,12 @@ The timer is unreferenced, so metrics collection does not keep the application p
 
 ## Configuration
 
-| Variable                 | Default                                | Purpose                                     |
-| ------------------------ | -------------------------------------- | ------------------------------------------- |
-| `NODEFLOW_COLLECTOR_URL` | `http://127.0.0.1:7331`                | Local destination for spans and metrics     |
-| `NODEFLOW_SERVICE_NAME`  | npm package name or `node-application` | Logical service name                        |
-| `NODEFLOW_DEBUG`         | Disabled                               | Set to `1` to log telemetry export failures |
+| Variable                   | Default                                | Purpose                                     |
+| -------------------------- | -------------------------------------- | ------------------------------------------- |
+| `NODEFLOW_COLLECTOR_URL`   | `http://127.0.0.1:7331`                | Local destination for spans and metrics     |
+| `NODEFLOW_EXPORT_PROTOCOL` | `json`                                 | `protobuf` for the V2 Go collector          |
+| `NODEFLOW_SERVICE_NAME`    | npm package name or `node-application` | Logical service name                        |
+| `NODEFLOW_DEBUG`           | Disabled                               | Set to `1` to log telemetry export failures |
 
 Span exports use short timeouts and failures do not fail the application request. With debug mode
 disabled, a stopped or unreachable local collector remains silent.
