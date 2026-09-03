@@ -71,4 +71,3 @@ message RuntimeMetrics {
   double event_loop_utilization = 7;
   double uptime_seconds = 8;
 }
-
