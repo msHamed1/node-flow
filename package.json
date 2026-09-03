@@ -27,8 +27,15 @@
     "integration:up": "docker compose up -d --build --wait --wait-timeout 240",
     "integration:down": "docker compose down -v --remove-orphans",
     "integration:test": "node scripts/integration-test.mjs",
-    "integration:logs": "docker compose logs -f nodeflow integration-api integration-worker mock-risk-service",
-    "integration": "yarn integration:up && yarn integration:test"
+    "integration:logs": "docker compose logs -f nodeflow-collector nodeflow integration-api integration-worker mock-risk-service",
+    "integration": "yarn integration:up && yarn integration:test",
+    "proto:generate": "scripts/generate-protocol.sh",
+    "proto:check": "yarn proto:generate && git diff --exit-code -- services/collector/gen",
+    "go:build": "cd services/collector && go build ./...",
+    "go:test": "cd services/collector && go test ./...",
+    "go:race": "cd services/collector && go test -race ./...",
+    "go:vet": "cd services/collector && go vet ./...",
+    "go:benchmark": "cd services/collector && go test -run '^$' -bench BenchmarkPipeline -benchmem ./internal/pipeline"
   },
   "repository": {
     "type": "git",

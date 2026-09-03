@@ -27,6 +27,21 @@ jobs:
           cache: yarn
           cache-dependency-path: yarn.lock
 
+      - name: Use Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: services/collector/go.mod
+          cache-dependency-path: services/collector/go.sum
+
+      - name: Use Protocol Buffers compiler
+        uses: arduino/setup-protoc@v3
+        with:
+          version: '31.1'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Go protocol generator
+        run: go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10
+
       - name: Use Yarn Classic
         run: |
           corepack enable
@@ -41,6 +56,21 @@ jobs:
 
       - name: Build
         run: yarn build
+
+      - name: Check generated protocol bindings
+        run: yarn proto:check
+
+      - name: Build Go collector
+        run: yarn go:build
+
+      - name: Vet Go collector
+        run: yarn go:vet
+
+      - name: Test Go collector
+        run: yarn go:test
+
+      - name: Race-test Go collector
+        run: yarn go:race
 
       - name: Check npm scope migration
         run: yarn scope:check

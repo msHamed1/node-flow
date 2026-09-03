@@ -3,10 +3,12 @@ import { readFile } from 'node:fs/promises';
 
 const apiUrl = process.env.NODEFLOW_INTEGRATION_API_URL ?? 'http://127.0.0.1:3000';
 const collectorUrl = process.env.NODEFLOW_INTEGRATION_COLLECTOR_URL ?? 'http://127.0.0.1:7331';
+const goCollectorUrl = process.env.NODEFLOW_INTEGRATION_GO_COLLECTOR_URL ?? 'http://127.0.0.1:4318';
 
 await assertAutomaticInstrumentationSources();
 await waitFor(`${apiUrl}/health`, 'integration API');
 await waitFor(`${collectorUrl}/api/health`, 'NodeFlow collector');
+await waitFor(`${goCollectorUrl}/readyz`, 'NodeFlow Go collector');
 
 // Prove aggregation under load before retaining the richer scenarios below in
 // the collector's bounded recent-trace window.
@@ -45,6 +47,7 @@ await post('/integration/full-flow', {
 });
 
 const snapshot = await waitForCompleteTopology();
+await assertGoCollectorMetrics();
 const spans = snapshot.traces.flatMap((trace) => flatten(trace.spans));
 const nodeSummary = snapshot.nodes.map((node) => `${node.type}:${node.name}`);
 
@@ -165,6 +168,7 @@ console.log(`Validated ${snapshot.traces.length} recent traces with operation-le
 console.log(
   'Real PostgreSQL, MongoDB/Mongoose, Redis, RabbitMQ, HTTP, local-event, worker, and deterministic error flows passed.',
 );
+console.log('TypeScript instrumentation → Protobuf → Go collector → TypeScript topology passed.');
 
 async function post(path, body = {}) {
   const response = await fetch(`${apiUrl}${path}`, {
@@ -206,6 +210,8 @@ async function waitForCompleteTopology() {
       names.has('MongoDB') &&
       names.has('Redis') &&
       names.has('RabbitMQ') &&
+      names.has('POST /integration/full-flow') &&
+      latest.nodes.some((node) => node.type === 'external-http') &&
       currentSpans.some(
         (span) => span.status === 'error' && span.name === 'mongodb.nodeflowInvalidWorkerCommand',
       )
@@ -278,4 +284,38 @@ async function assertAutomaticInstrumentationSources() {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+async function assertGoCollectorMetrics() {
+  let observed;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const response = await fetch(`${goCollectorUrl}/metrics`);
+    assert(response.ok, `Go collector metrics returned ${response.status}`);
+    const metrics = await response.text();
+    const snapshotResponse = await fetch(`${collectorUrl}/api/snapshot`);
+    assert(snapshotResponse.ok, `topology snapshot returned ${snapshotResponse.status}`);
+    const currentSnapshot = await snapshotResponse.json();
+    const value = (name) => {
+      const match = metrics.match(new RegExp(`^${name} ([0-9.eE+-]+)$`, 'm'));
+      return match ? Number(match[1]) : undefined;
+    };
+    observed = {
+      received: value('nodeflow_collector_telemetry_received_total'),
+      processed: value('nodeflow_collector_telemetry_processed_total'),
+      nodes: value('nodeflow_collector_topology_nodes'),
+      edges: value('nodeflow_collector_topology_edges'),
+    };
+    if (
+      (observed.received ?? 0) > 0 &&
+      (observed.processed ?? 0) > 0 &&
+      observed.nodes === currentSnapshot.nodes.length &&
+      observed.edges === currentSnapshot.edges.length
+    ) {
+      return;
+    }
+    await delay(250);
+  }
+  throw new Error(
+    `Go collector metrics did not converge with topology: ${JSON.stringify(observed)}`,
+  );
 }
