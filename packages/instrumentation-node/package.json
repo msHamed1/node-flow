@@ -1,6 +1,6 @@
 {
   "name": "@mshamed1/node-flow-instrumentation-node",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "OpenTelemetry preload, runtime metrics, and local exporter for NodeFlow.",
   "license": "Apache-2.0",
   "type": "module",
