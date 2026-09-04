@@ -66,6 +66,8 @@ assert.equal(probe?.requestCount, 1, 'controlled restart did not produce one can
 await waitForMetric(
   (metrics) =>
     metrics.nodeflow_collector_spool_replayed_total >= 1 &&
+    metrics.nodeflow_collector_wal_replayed_total >= 1 &&
+    metrics.nodeflow_collector_wal_pending_records === 0 &&
     metrics.nodeflow_collector_spool_active_records === 0,
   'replayed records were not checkpointed after recovery',
 );

@@ -16,8 +16,8 @@ HTTP receive
     ↓
 decode → validate → sanitize
     ↓
-append record → fsync file → atomic rename → fsync directory
-    │                                      └─ disk budget full → HTTP 507
+append versioned record(s) → CRC group marker → fsync WAL segment
+    │                                      └─ disk budget/reservation full → HTTP 507
     ↓
 bounded in-memory dispatch window
     ↓
@@ -28,18 +28,21 @@ TelemetrySink
     ↓
 TypeScript topology engine and dashboard
     ↓ success
-remove record → fsync directory
+append acknowledgement → fsync checkpoint → delete fully acknowledged segment
 ```
 
-With the default `durable` spool mode, `202 Accepted` means the sanitized envelope and its directory
-entry have been synced to disk. It does not mean the downstream topology sink has committed it.
+With the default `group-commit` mode, `202 Accepted` means the sanitized envelope, its CRC-protected
+record frame, and the enclosing commit marker have completed `fsync` on the active WAL segment.
+Several requests may cross that boundary in one sync. It does not mean the downstream topology sink
+has committed the record.
 Transient sink failures are retried; unacknowledged records are replayed after restart. Successful
 sink delivery followed by a crash before the removal checkpoint can replay a record, so delivery is
 at least once, not exactly once.
 
-`NODEFLOW_SPOOL_MODE=memory` retains the original bounded-memory admission behavior for controlled
-benchmarks and compatibility testing. In that mode, `202` means only in-memory admission and a hard
-termination can lose accepted data.
+`sync` uses the same WAL format with one record per commit. `legacy` retains V2.1's per-envelope
+temp-write/fsync/rename/directory-sync implementation for comparisons. `memory` retains bounded
+memory admission. In memory mode, `202` means only in-memory admission and hard termination can lose
+accepted data. `durable` remains an alias for `group-commit`.
 
 ## Run locally
 
@@ -89,34 +92,43 @@ span, and bounded identifier/name/value lengths.
 
 ## Configuration
 
-| Environment variable             | Default                 | Meaning                                                  |
-| -------------------------------- | ----------------------- | -------------------------------------------------------- |
-| `NODEFLOW_GO_LISTEN_ADDR`        | `:4318`                 | HTTP bind address                                        |
-| `NODEFLOW_TOPOLOGY_URL`          | `http://127.0.0.1:7331` | TypeScript topology/dashboard process                    |
-| `NODEFLOW_WORKERS`               | `min(GOMAXPROCS, 32)`   | Service-sharded sink worker count                        |
-| `NODEFLOW_QUEUE_SIZE`            | `10000`                 | In-memory dispatch window; not the durable capacity      |
-| `NODEFLOW_BATCH_SIZE`            | `250`                   | Target telemetry events per worker batch                 |
-| `NODEFLOW_FLUSH_INTERVAL`        | `500ms`                 | Maximum wait before flushing a partial batch             |
-| `NODEFLOW_MAX_BODY_BYTES`        | `2097152`               | Maximum request body                                     |
-| `NODEFLOW_SINK_TIMEOUT`          | `5s`                    | Timeout for each downstream HTTP operation               |
-| `NODEFLOW_SHUTDOWN_TIMEOUT`      | `15s`                   | Drain deadline after SIGINT/SIGTERM                      |
-| `NODEFLOW_LOG_LEVEL`             | `info`                  | `debug`, `info`, `warn`, or `error`                      |
-| `NODEFLOW_SINK`                  | `http`                  | `http`; `discard` is reserved for isolated load tests    |
-| `NODEFLOW_SPOOL_MODE`            | `durable`               | `durable` or benchmark-only `memory` admission           |
-| `NODEFLOW_SPOOL_DIR`             | `.nodeflow/spool`       | Active and quarantined durable records                   |
-| `NODEFLOW_SPOOL_MAX_BYTES`       | `536870912`             | Allocated-byte cap across active and quarantined records |
-| `NODEFLOW_RETRY_INITIAL_BACKOFF` | `100ms`                 | First transient-failure delay                            |
-| `NODEFLOW_RETRY_MAX_BACKOFF`     | `30s`                   | Exponential-backoff ceiling                              |
-| `NODEFLOW_RETRY_MAX_ATTEMPTS`    | `10`                    | Total sink attempts before quarantine                    |
-| `NODEFLOW_RETRY_JITTER`          | `0.2`                   | Symmetric jitter fraction from `0` to `1`                |
+| Environment variable             | Default                 | Meaning                                                 |
+| -------------------------------- | ----------------------- | ------------------------------------------------------- |
+| `NODEFLOW_GO_LISTEN_ADDR`        | `:4318`                 | HTTP bind address                                       |
+| `NODEFLOW_TOPOLOGY_URL`          | `http://127.0.0.1:7331` | TypeScript topology/dashboard process                   |
+| `NODEFLOW_WORKERS`               | `min(GOMAXPROCS, 32)`   | Service-sharded sink worker count                       |
+| `NODEFLOW_QUEUE_SIZE`            | `10000`                 | In-memory dispatch window; not the durable capacity     |
+| `NODEFLOW_BATCH_SIZE`            | `250`                   | Target telemetry events per worker batch                |
+| `NODEFLOW_FLUSH_INTERVAL`        | `500ms`                 | Maximum wait before flushing a partial batch            |
+| `NODEFLOW_MAX_BODY_BYTES`        | `2097152`               | Maximum request body                                    |
+| `NODEFLOW_SINK_TIMEOUT`          | `5s`                    | Timeout for each downstream HTTP operation              |
+| `NODEFLOW_SHUTDOWN_TIMEOUT`      | `15s`                   | Drain deadline after SIGINT/SIGTERM                     |
+| `NODEFLOW_LOG_LEVEL`             | `info`                  | `debug`, `info`, `warn`, or `error`                     |
+| `NODEFLOW_SINK`                  | `http`                  | `http`; `discard` is reserved for isolated load tests   |
+| `NODEFLOW_SPOOL_MODE`            | `group-commit`          | `group-commit`, `sync`, `legacy`, or `memory`           |
+| `NODEFLOW_SPOOL_DIR`             | `.nodeflow/spool`       | WAL segments and durable checkpoints                    |
+| `NODEFLOW_SPOOL_MAX_BYTES`       | `536870912`             | Logical WAL/checkpoint cap, including reserved metadata |
+| `NODEFLOW_WAL_SEGMENT_BYTES`     | `16777216`              | Rotation threshold for each append-only WAL segment     |
+| `NODEFLOW_WAL_GROUP_MAX_RECORDS` | `64`                    | Maximum records sharing one admission fsync             |
+| `NODEFLOW_WAL_GROUP_MAX_DELAY`   | `2ms`                   | Maximum delay from first queued record to group fsync   |
+| `NODEFLOW_WAL_APPEND_QUEUE_SIZE` | `2048`                  | Bounded admission requests waiting for the WAL writer   |
+| `NODEFLOW_RETRY_INITIAL_BACKOFF` | `100ms`                 | First transient-failure delay                           |
+| `NODEFLOW_RETRY_MAX_BACKOFF`     | `30s`                   | Exponential-backoff ceiling                             |
+| `NODEFLOW_RETRY_MAX_ATTEMPTS`    | `10`                    | Total sink attempts before quarantine                   |
+| `NODEFLOW_RETRY_JITTER`          | `0.2`                   | Symmetric jitter fraction from `0` to `1`               |
 
-Durable spool exhaustion rejects with HTTP 507 and `Retry-After: 5`; it never reports an
-uncommitted record as accepted. Memory-mode queue exhaustion returns HTTP 429 and `Retry-After: 1`.
-Corrupt and permanently failing records move to `spool/quarantine` and continue consuming the disk
-budget until an operator inspects and removes them. The cap covers committed and quarantined file
-allocation. Because allocation is known only after a temp record is written, one serialized
-in-progress admission can transiently consume up to one request body beyond the configured cap; the
-temp file is removed if the commit would exceed the budget.
+WAL exhaustion rejects with HTTP 507 and `Retry-After: 5`; a full bounded append queue returns HTTP
+429 and `Retry-After: 1`. The cap covers segment and checkpoint bytes plus space reserved for every
+admitted record's remaining retry/terminal checkpoints, so ordinary retry or acknowledgement writes
+cannot push the WAL beyond its configured logical bound. Permanently failing records are checkpointed
+as quarantined and keep their containing segment live for inspection. Fully acknowledged segments
+are deleted and the directory is synced. Committed checksum or framing corruption stops startup or
+readiness; it is never silently discarded. Only an incomplete uncommitted final group or partial
+checkpoint entry is truncated during recovery.
+
+The WAL refuses to start over undrained V2.1 per-envelope files. Run `legacy` mode to drain them, or
+archive them and select a clean directory, before enabling the WAL. This prevents an upgrade from
+silently stranding previously accepted telemetry.
 
 ## Graceful shutdown
 
@@ -127,9 +139,10 @@ startup replay. New requests during shutdown receive HTTP 503.
 ## Metrics
 
 The Prometheus-compatible surface includes received, processed, and rejected event totals; queue
-depth; active workers; worker errors; batch size; processing latency; spool allocated bytes, active
-and quarantined records, retries, startup replay, corruptions, permanent failures, and dropped
-records; downstream topology size; heap allocation; goroutines; and process CPU seconds.
+depth; active workers; worker errors; batch size; processing latency; durable retries and permanent
+failures; WAL bytes, segment and pending counts, append/fsync latency, records per group commit,
+startup replay, compaction count/latency, corruption, and disk-pressure rejections; downstream
+topology size; heap allocation; goroutines; and process CPU seconds.
 
 ## Container
 
@@ -167,4 +180,4 @@ NODEFLOW_SINK=discard go run ./cmd/nodeflow-collector
 go run ./cmd/loadgen -rate 10000 -duration 10s -events-per-request 50
 ```
 
-See [the measured durable-admission comparison](../../docs/benchmarks/go-collector-durable-2026-09-04.md).
+See [the segmented-WAL comparison](../../docs/benchmarks/go-collector-wal-2026-09-04.md).

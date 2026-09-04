@@ -79,17 +79,20 @@ Changing transport does not change stored snapshot semantics.
 
 ## Capacity and delivery semantics
 
-In the default durable mode, `202 Accepted` acknowledges a sanitized record only after its contents
-and directory entry are synced to the bounded local spool. It does not acknowledge a topology
-commit. The dispatch queue remains bounded by `NODEFLOW_QUEUE_SIZE`, while durable capacity is
-bounded independently by `NODEFLOW_SPOOL_MAX_BYTES`. Exhaustion returns HTTP 507 rather than moving
-the backlog into sockets or claiming acceptance.
+In the default `group-commit` mode, `202 Accepted` acknowledges a sanitized record only after its
+versioned data frame and CRC-protected group marker have completed `fsync` in an append-only WAL
+segment. It does not acknowledge a topology commit. The dispatch queue remains bounded by
+`NODEFLOW_QUEUE_SIZE`, while durable capacity is bounded independently by
+`NODEFLOW_SPOOL_MAX_BYTES`. Exhaustion returns HTTP 507 rather than moving the backlog into sockets
+or claiming acceptance.
 
 Workers are selected by service name, so envelopes for one application service retain admission
 order while unrelated services can progress independently. Transient failures use checkpointed
 exponential backoff with jitter. HTTP 4xx failures other than 408, 425, and 429 are permanent;
-permanent or retry-exhausted records are quarantined. Startup verifies record framing and CRC32,
-quarantines corruption, and replays valid unacknowledged records.
+permanent or retry-exhausted records are checkpointed as quarantined. Startup verifies segment,
+record, commit, and checkpoint framing and CRC32. An incomplete uncommitted final group is truncated;
+committed corruption is fatal and visible rather than silently discarded. Fully acknowledged
+closed segments are deleted and the directory metadata is synced.
 
 Delivery is at least once. A crash after the sink commits but before the collector syncs removal can
 replay the record. The TypeScript engine ignores a repeated span ID while that trace remains in its
@@ -114,8 +117,7 @@ contain only telemetry after the collector's validation and redaction boundary.
 - gRPC/OTLP receiver adapters.
 - Cross-platform distribution of the Go binary through the npm CLI.
 - Remote/multi-tenant collection and authentication.
-- A compacting segmented WAL; the current per-envelope record format favors simple recovery over
-  high synchronous-write throughput.
+- Durable end-to-end idempotency across topology-process restarts and trace-history eviction.
 
 The checked-in `nodeflow.topology-golden.v1` corpus now defines the TypeScript behavior that a future
 Go projection must match. It is a prerequisite, not approval to migrate: the corpus should first be

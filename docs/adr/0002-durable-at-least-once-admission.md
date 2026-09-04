@@ -1,6 +1,6 @@
 # ADR 0002: Use bounded at-least-once durable collector admission
 
-- Status: Accepted
+- Status: Superseded by ADR 0003
 - Date: 2026-09-04
 
 ## Context

@@ -587,8 +587,8 @@ The test executes 100 PostgreSQL transactions and verifies they remain one archi
 also verifies every documented Mongoose and Redis operation, RabbitMQ producer and both consumer
 paths, outgoing HTTP, the cache miss/hit path, the local event listener, one correlated API-to-worker
 trace, and deterministic PostgreSQL, MongoDB, Redis, RabbitMQ, HTTP, business, and worker failures.
-The durability scenario then stops the TypeScript sink, admits telemetry to the Go spool,
-force-kills the Go process, and verifies restart replay and checkpoint removal. The Go collector's
+The durability scenario then stops the TypeScript sink, admits telemetry to the Go segmented WAL,
+force-kills the Go process, and verifies restart replay and checkpoint compaction. The Go collector's
 default delivery contract is at least once; the controlled scenario observes one canonical call but
 does not claim exactly-once delivery.
 

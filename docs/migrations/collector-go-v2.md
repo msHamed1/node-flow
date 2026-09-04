@@ -26,7 +26,7 @@ The first Go service owns the runtime-agnostic collector infrastructure:
 
 - versioned Protobuf and legacy JSON ingestion;
 - transport validation and a second redaction boundary;
-- a bounded, restart-safe local spool with rejection when its disk budget is full;
+- a bounded, restart-safe segmented WAL with group commit and rejection when its disk budget is full;
 - timed batching and a fixed-size worker pool;
 - per-service ordering, checkpointed retry, startup replay, corruption quarantine, and graceful
   draining;
@@ -79,12 +79,12 @@ JSON remains the default while the Go service is optional.
 
 ### Go collector to TypeScript topology process
 
-The initial `TelemetrySink` forwards compatible JSON to the existing endpoints. In default durable
-mode, a successful client response acknowledges a synced spool record, not downstream topology
-commit. The bridge retries transient failures with exponential backoff and jitter, then removes a
-record only after a successful sink response and a synced removal checkpoint. Startup replays valid
+The initial `TelemetrySink` forwards compatible JSON to the existing endpoints. In default
+`group-commit` mode, a successful client response acknowledges a synced WAL data group, not
+downstream topology commit. The bridge retries transient failures with exponential backoff and
+jitter, then checkpoints a record only after a successful sink response. Startup replays valid
 unacknowledged records. Permanent HTTP failures and records that exhaust the configured attempt
-budget are quarantined for inspection.
+budget are checkpointed as quarantined for inspection.
 
 This is at-least-once delivery. The crash window between sink success and the removal checkpoint can
 replay an already delivered record. The TypeScript topology engine currently deduplicates span IDs
@@ -96,10 +96,11 @@ The Go service intentionally does not inspect `TopologyEngine` maps or reproduce
 
 ## Backpressure policy
 
-The durable spool caps filesystem-allocated bytes across both active and quarantined files. When the
-cap is exhausted the collector returns HTTP 507 with `Retry-After: 5`; during shutdown it returns
-HTTP 503. Blocking request handlers would move an unbounded backlog into sockets and instrumentation
-exporters, while explicit rejection reports work that never entered NodeFlow.
+The WAL caps logical segment and checkpoint bytes and reserves enough capacity for admitted records'
+remaining checkpoint transitions. When the cap is exhausted the collector returns HTTP 507 with
+`Retry-After: 5`; during shutdown it returns HTTP 503. Blocking request handlers would move an
+unbounded backlog into sockets and instrumentation exporters, while explicit rejection reports work
+that never entered NodeFlow.
 
 The in-memory queue controls only the dispatch working set and refills from disk. Request bodies and
 per-envelope span/attribute counts remain bounded. The optional `memory` spool mode retains the
@@ -127,6 +128,6 @@ original queue-full HTTP 429 behavior for controlled comparisons; it is not the 
 4. Run the Go service in Docker Compose in front of the unchanged TypeScript topology/dashboard
    service and assert the complete existing integration topology.
 5. Define a compact canonical topology corpus and add a bounded durable spool with restart replay.
-6. Collect parity and memory-versus-durable load evidence. Keep both collector choices supported.
+6. Replace per-envelope files with a segmented WAL and collect memory, legacy, and WAL load evidence.
 7. Only after an independent Go engine passes the corpus, decide whether to implement a Go topology sink or keep
    topology reconstruction in TypeScript as a separately versioned service.
