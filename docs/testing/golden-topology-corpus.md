@@ -39,17 +39,18 @@ volatile fields must not be added merely to mirror the full snapshot object.
 
 ## Coverage
 
-The 14 fixtures cover HTTP/controller/service chains, nested services, MongoDB/Mongoose
+The 15 fixtures cover HTTP/controller/service chains, nested services, MongoDB/Mongoose
 normalization, PostgreSQL, Redis, RabbitMQ, external HTTP, transparent local-event detail,
 transparent internal spans, background workers, errors, parallel and repeated operations,
-recursive same-service calls, duplicate replay, missing parents, late/out-of-order parents, mixed
-dependency types, and multi-service traces.
+recursive same-service calls, duplicate replay, missing parents, late/out-of-order parents, multiple
+roots, shared dependencies, mixed dependency types, and multi-service traces.
 
 The Go differential runner executes each fixture in its native batching and in two deterministic
 seeded span-level permutations. It runs the TypeScript source-of-truth implementation and the
 isolated Go prototype from the same input, canonicalizes both snapshots, and reports missing or
 unexpected nodes and edges plus identity-specific node, edge, and path mismatches. This gives 42
-cross-language comparisons without expanding the checked-in corpus into unstable snapshots.
+cross-language comparisons (45 with the current corpus) without expanding the checked-in corpus
+into unstable snapshots.
 
 Run it with:
 

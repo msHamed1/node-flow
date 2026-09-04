@@ -43,20 +43,21 @@ derived error rate, and runtime-path hash IDs are intentionally ignored. See
 
 ## Differential coverage
 
-V2.3 has 14 focused golden fixtures. The two additions over V2.1 cover semantics that were not
+V2.3 has 15 focused golden fixtures. The three additions over V2.1 cover semantics that were not
 previously explicit:
 
 1. an `internal` span is transparent for topology, while its error still fails the trace path;
 2. recursive spans with the same service identity aggregate node calls but do not create self-edges
-   or repeat the same node consecutively in a path.
+   or repeat the same node consecutively in a path;
+3. multiple trace roots can contribute separate paths and edges to one shared dependency node.
 
 Every fixture is executed three ways: its authored batching plus two deterministic seeded
-span-level arrival permutations. The test therefore performs 42 TypeScript-versus-Go comparisons.
+span-level arrival permutations. The test therefore performs 45 TypeScript-versus-Go comparisons.
 It first confirms the TypeScript result still equals the reviewed golden value, then compares that
 live TypeScript result to Go. A failure identifies missing or unexpected nodes/edges or the exact
 node, edge, or path identity whose semantic fields differ.
 
-Current result: all 42 comparisons pass with no ignored semantic mismatch.
+Current result: all 45 comparisons pass with no ignored semantic mismatch.
 
 ## Concurrency ownership model
 

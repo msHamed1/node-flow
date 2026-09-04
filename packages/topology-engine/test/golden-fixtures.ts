@@ -32,6 +32,8 @@ export function goldenFixtures(): GoldenFixture[] {
   const queueId = 'queue:rabbitmq';
   const externalId = 'external-http:risk.example.com';
   const workerId = 'worker:paymentworker';
+  const ordersServiceId = 'nestjs:service:ordersservice';
+  const inventoryServiceId = 'nestjs:service:inventoryservice';
 
   return [
     {
@@ -489,6 +491,56 @@ export function goldenFixtures(): GoldenFixture[] {
         ],
         [edge(serviceId, postgresId, emetrics(1, 0, 8))],
         [path('PaymentsService.outer', [serviceId, postgresId], pmetrics(1, 0, 40))],
+      ),
+    },
+    {
+      name: 'multiple roots share one dependency node',
+      covers: ['multiple roots', 'same dependency used by multiple services'],
+      batches: [
+        batch(
+          'payments-api',
+          component('roots', 'orders', undefined, 'OrdersService.reserve', 'service', 40, 0, {
+            identity: 'service:OrdersService',
+            className: 'OrdersService',
+            framework: 'nestjs',
+          }),
+          component('roots', 'orders-redis', 'orders', 'Redis', 'redis', 5, 5, {
+            identity: 'redis:Redis',
+          }),
+          component(
+            'roots',
+            'inventory',
+            undefined,
+            'InventoryService.reserve',
+            'service',
+            30,
+            50,
+            {
+              identity: 'service:InventoryService',
+              className: 'InventoryService',
+              framework: 'nestjs',
+            },
+          ),
+          component('roots', 'inventory-redis', 'inventory', 'Redis', 'redis', 7, 55, {
+            identity: 'redis:Redis',
+          }),
+        ),
+      ],
+      expected: topology(
+        ['payments-api'],
+        [
+          node(inventoryServiceId, 'service', 'InventoryService', nmetrics(1, 0, 30), 'nestjs'),
+          node(ordersServiceId, 'service', 'OrdersService', nmetrics(1, 0, 40), 'nestjs'),
+          node(redisId, 'cache', 'Redis', nmetrics(2, 0, 6, 5, 7, 7)),
+        ],
+        [
+          edge(inventoryServiceId, redisId, emetrics(1, 0, 7)),
+          edge(ordersServiceId, redisId, emetrics(1, 0, 5)),
+        ],
+        [
+          path('InventoryService.reserve', [inventoryServiceId, redisId], pmetrics(1, 0, 80)),
+          path('OrdersService.reserve', [ordersServiceId, redisId], pmetrics(1, 0, 80)),
+        ],
       ),
     },
   ];
