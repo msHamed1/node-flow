@@ -1,6 +1,6 @@
 # NodeFlow V2 collector migration design
 
-Status: durable collector milestone implemented; topology migration remains deferred
+Status: historical V2.1/V2.2 collector migration record; Go topology cutover completed by ADR 0004
 
 ## Current collector responsibilities
 

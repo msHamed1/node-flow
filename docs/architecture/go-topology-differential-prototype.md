@@ -1,5 +1,8 @@
 # Go TopologyEngine differential prototype
 
+> Historical V2.3 design and benchmark record. V2.4 completed the production adapter and cutover;
+> see [ADR 0004](../adr/0004-go-topology-authority.md) for the current authority and restart model.
+
 ## Status and boundary
 
 The Go topology implementation is an experimental V2.3 package at
