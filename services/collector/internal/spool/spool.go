@@ -22,7 +22,10 @@ import (
 
 var (
 	ErrFull          = errors.New("collector durable spool is full")
+	ErrBusy          = errors.New("collector durable admission queue is full")
 	ErrCorruptRecord = errors.New("collector spool record is corrupt")
+	ErrCorruptWAL    = errors.New("collector WAL contains committed corruption")
+	ErrLegacySpool   = errors.New("legacy per-envelope spool records are present")
 )
 
 const (
@@ -46,12 +49,16 @@ type Recovery struct {
 	Records     int64
 	Bytes       int64
 	Corruptions int64
+	Segments    int64
+	Truncated   int64
 }
 
 type Stats struct {
 	Bytes              int64
+	ReservedBytes      int64
 	ActiveRecords      int64
 	QuarantinedRecords int64
+	Segments           int64
 }
 
 type Record struct {
@@ -60,6 +67,22 @@ type Record struct {
 	EnqueuedAt time.Time
 	Envelope   telemetry.Envelope
 }
+
+// Storage is the durable admission contract used by the processing pipeline.
+// Implementations must not return successfully from Append until the record has
+// crossed their documented crash-recovery boundary.
+type Storage interface {
+	Append(context.Context, telemetry.Envelope) (Record, error)
+	NextAfter(uint64) (Record, bool, error)
+	Ack([]Record) error
+	MarkRetry([]Record) error
+	Quarantine([]Record, string) error
+	Stats() Stats
+	Ready() error
+	Close() error
+}
+
+var _ Storage = (*Store)(nil)
 
 type diskRecord struct {
 	ID                 uint64             `json:"id"`
