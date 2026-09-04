@@ -10,7 +10,9 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/nodeflow-collector ./cmd/nodeflow-collector
 
 FROM alpine:3.21
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates \
+    && mkdir -p /var/lib/nodeflow/spool \
+    && chown -R 65532:65532 /var/lib/nodeflow
 COPY --from=build /out/nodeflow-collector /usr/local/bin/nodeflow-collector
 USER 65532:65532
 EXPOSE 4318

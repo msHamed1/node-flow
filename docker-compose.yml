@@ -106,11 +106,20 @@ services:
       NODEFLOW_QUEUE_SIZE: ${NODEFLOW_QUEUE_SIZE:-10000}
       NODEFLOW_BATCH_SIZE: ${NODEFLOW_BATCH_SIZE:-250}
       NODEFLOW_FLUSH_INTERVAL: ${NODEFLOW_FLUSH_INTERVAL:-500ms}
+      NODEFLOW_SPOOL_MODE: ${NODEFLOW_SPOOL_MODE:-durable}
+      NODEFLOW_SPOOL_DIR: /var/lib/nodeflow/spool
+      NODEFLOW_SPOOL_MAX_BYTES: ${NODEFLOW_SPOOL_MAX_BYTES:-536870912}
+      NODEFLOW_RETRY_INITIAL_BACKOFF: ${NODEFLOW_RETRY_INITIAL_BACKOFF:-100ms}
+      NODEFLOW_RETRY_MAX_BACKOFF: ${NODEFLOW_RETRY_MAX_BACKOFF:-30s}
+      NODEFLOW_RETRY_MAX_ATTEMPTS: ${NODEFLOW_RETRY_MAX_ATTEMPTS:-10}
+      NODEFLOW_RETRY_JITTER: ${NODEFLOW_RETRY_JITTER:-0.2}
     depends_on:
       nodeflow:
         condition: service_healthy
     ports:
       - '127.0.0.1:4318:4318'
+    volumes:
+      - nodeflow-spool:/var/lib/nodeflow
     healthcheck:
       test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:4318/readyz']
       interval: 3s
@@ -228,3 +237,4 @@ volumes:
   postgres-data:
   mongodb-data:
   rabbitmq-data:
+  nodeflow-spool:

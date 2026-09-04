@@ -102,6 +102,9 @@ jobs:
       - name: Test real-infrastructure integrations
         run: yarn integration:test
 
+      - name: Test durable sink outage and crash recovery
+        run: yarn integration:durability
+
       - name: Stop real-infrastructure integration lab
         if: always()
         run: yarn integration:down
