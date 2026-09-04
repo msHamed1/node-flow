@@ -11,6 +11,7 @@
     "build": "yarn workspace @mshamed1/node-flow-protocol build && yarn workspace @mshamed1/node-flow-integration-contracts build && yarn workspace @mshamed1/node-flow-topology-engine build && yarn workspace @mshamed1/node-flow-core build && yarn workspace @mshamed1/node-flow-instrumentation-node build && yarn workspace @mshamed1/node-flow-instrumentation-nestjs build && yarn workspace @mshamed1/node-flow-dashboard build && yarn workspace @mshamed1/node-flow-collector build && yarn workspace @mshamed1/node-flow build && yarn workspace @mshamed1/node-flow-demo-nestjs build && yarn workspace @mshamed1/node-flow-mock-risk-service build && yarn workspace @mshamed1/node-flow-integration-api build && yarn workspace @mshamed1/node-flow-integration-worker build",
     "test": "vitest run",
     "test:golden": "vitest run packages/topology-engine/test/golden-corpus.test.ts",
+    "test:topology-diff": "vitest run packages/topology-engine/test/go-differential.test.ts",
     "test:watch": "vitest",
     "lint": "yarn workspaces run lint",
     "format": "prettier --write .",
