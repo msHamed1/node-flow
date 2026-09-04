@@ -8,7 +8,8 @@ x-nodeflow-build: &nodeflow-build
     dockerfile: Dockerfile.integration
 
 x-nodeflow-environment: &nodeflow-environment
-  NODEFLOW_COLLECTOR_URL: http://nodeflow:7331
+  NODEFLOW_COLLECTOR_URL: http://nodeflow-collector:4318
+  NODEFLOW_EXPORT_PROTOCOL: protobuf
   POSTGRES_HOST: postgres
   POSTGRES_PORT: 5432
   POSTGRES_USER: ${POSTGRES_USER:-nodeflow}
@@ -76,12 +77,11 @@ services:
 
   nodeflow:
     <<: *nodeflow-build
+    profiles: ['typescript-rollback']
     command: ['node', 'packages/cli/dist/cli.js', 'collector']
     environment:
       NODEFLOW_HOST: 0.0.0.0
       NODEFLOW_PORT: 7331
-    ports:
-      - '127.0.0.1:7331:7331'
     healthcheck:
       test:
         [
@@ -90,6 +90,42 @@ services:
           '-e',
           "fetch('http://127.0.0.1:7331/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
         ]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  nodeflow-collector:
+    build:
+      context: .
+      dockerfile: Dockerfile.collector
+    environment:
+      NODEFLOW_GO_LISTEN_ADDR: 0.0.0.0:4318
+      NODEFLOW_TOPOLOGY_ENGINE: ${NODEFLOW_TOPOLOGY_ENGINE:-go}
+      NODEFLOW_TOPOLOGY_URL: http://nodeflow:7331
+      NODEFLOW_DASHBOARD_DIR: /usr/share/nodeflow/dashboard
+      NODEFLOW_WORKERS: ${NODEFLOW_WORKERS:-8}
+      NODEFLOW_QUEUE_SIZE: ${NODEFLOW_QUEUE_SIZE:-10000}
+      NODEFLOW_BATCH_SIZE: ${NODEFLOW_BATCH_SIZE:-250}
+      NODEFLOW_FLUSH_INTERVAL: ${NODEFLOW_FLUSH_INTERVAL:-500ms}
+      NODEFLOW_SPOOL_MODE: ${NODEFLOW_SPOOL_MODE:-group-commit}
+      NODEFLOW_SPOOL_DIR: /var/lib/nodeflow/spool
+      NODEFLOW_TOPOLOGY_STATE_PATH: /var/lib/nodeflow/topology-state/topology-state.json
+      NODEFLOW_SPOOL_MAX_BYTES: ${NODEFLOW_SPOOL_MAX_BYTES:-536870912}
+      NODEFLOW_WAL_SEGMENT_BYTES: ${NODEFLOW_WAL_SEGMENT_BYTES:-16777216}
+      NODEFLOW_WAL_GROUP_MAX_RECORDS: ${NODEFLOW_WAL_GROUP_MAX_RECORDS:-64}
+      NODEFLOW_WAL_GROUP_MAX_DELAY: ${NODEFLOW_WAL_GROUP_MAX_DELAY:-2ms}
+      NODEFLOW_WAL_APPEND_QUEUE_SIZE: ${NODEFLOW_WAL_APPEND_QUEUE_SIZE:-2048}
+      NODEFLOW_RETRY_INITIAL_BACKOFF: ${NODEFLOW_RETRY_INITIAL_BACKOFF:-100ms}
+      NODEFLOW_RETRY_MAX_BACKOFF: ${NODEFLOW_RETRY_MAX_BACKOFF:-30s}
+      NODEFLOW_RETRY_MAX_ATTEMPTS: ${NODEFLOW_RETRY_MAX_ATTEMPTS:-10}
+      NODEFLOW_RETRY_JITTER: ${NODEFLOW_RETRY_JITTER:-0.2}
+    ports:
+      - '127.0.0.1:4318:4318'
+      - '127.0.0.1:7331:4318'
+    volumes:
+      - nodeflow-spool:/var/lib/nodeflow
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:4318/readyz']
       interval: 3s
       timeout: 3s
       retries: 30
@@ -106,11 +142,12 @@ services:
         'apps/mock-risk-service/dist/main.js',
       ]
     environment:
-      NODEFLOW_COLLECTOR_URL: http://nodeflow:7331
+      NODEFLOW_COLLECTOR_URL: http://nodeflow-collector:4318
+      NODEFLOW_EXPORT_PROTOCOL: protobuf
       NODEFLOW_SERVICE_NAME: mock-risk-service
       PORT: 3100
     depends_on:
-      nodeflow:
+      nodeflow-collector:
         condition: service_healthy
     ports:
       - '127.0.0.1:3100:3100'
@@ -148,7 +185,7 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      nodeflow:
+      nodeflow-collector:
         condition: service_healthy
     healthcheck:
       test:
@@ -180,7 +217,7 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      nodeflow:
+      nodeflow-collector:
         condition: service_healthy
       mock-risk-service:
         condition: service_healthy
@@ -204,3 +241,4 @@ volumes:
   postgres-data:
   mongodb-data:
   rabbitmq-data:
+  nodeflow-spool:

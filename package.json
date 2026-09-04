@@ -10,6 +10,9 @@
   "scripts": {
     "build": "yarn workspace @mshamed1/node-flow-protocol build && yarn workspace @mshamed1/node-flow-integration-contracts build && yarn workspace @mshamed1/node-flow-topology-engine build && yarn workspace @mshamed1/node-flow-core build && yarn workspace @mshamed1/node-flow-instrumentation-node build && yarn workspace @mshamed1/node-flow-instrumentation-nestjs build && yarn workspace @mshamed1/node-flow-dashboard build && yarn workspace @mshamed1/node-flow-collector build && yarn workspace @mshamed1/node-flow build && yarn workspace @mshamed1/node-flow-demo-nestjs build && yarn workspace @mshamed1/node-flow-mock-risk-service build && yarn workspace @mshamed1/node-flow-integration-api build && yarn workspace @mshamed1/node-flow-integration-worker build",
     "test": "vitest run",
+    "test:golden": "vitest run packages/topology-engine/test/golden-corpus.test.ts",
+    "test:topology-diff": "vitest run packages/topology-engine/test/go-differential.test.ts",
+    "benchmark:topology": "yarn workspace @mshamed1/node-flow-topology-engine build && node --expose-gc scripts/benchmark-topology.mjs",
     "test:watch": "vitest",
     "lint": "yarn workspaces run lint",
     "format": "prettier --write .",
@@ -27,8 +30,17 @@
     "integration:up": "docker compose up -d --build --wait --wait-timeout 240",
     "integration:down": "docker compose down -v --remove-orphans",
     "integration:test": "node scripts/integration-test.mjs",
-    "integration:logs": "docker compose logs -f nodeflow integration-api integration-worker mock-risk-service",
-    "integration": "yarn integration:up && yarn integration:test"
+    "integration:durability": "node scripts/durable-recovery-test.mjs",
+    "integration:logs": "docker compose logs -f nodeflow-collector nodeflow integration-api integration-worker mock-risk-service",
+    "integration": "yarn integration:up && yarn integration:test && yarn integration:durability",
+    "proto:generate": "scripts/generate-protocol.sh",
+    "proto:check": "yarn proto:generate && git diff --exit-code -- services/collector/gen",
+    "go:build": "cd services/collector && go build ./...",
+    "go:test": "cd services/collector && go test ./...",
+    "go:race": "cd services/collector && go test -race ./...",
+    "go:vet": "cd services/collector && go vet ./...",
+    "go:benchmark": "cd services/collector && go test -run '^$' -bench BenchmarkPipeline -benchmem ./internal/pipeline",
+    "go:benchmark:topology": "cd services/collector && go test -run '^$' -bench 'BenchmarkTopology' -benchmem ./internal/topology"
   },
   "repository": {
     "type": "git",

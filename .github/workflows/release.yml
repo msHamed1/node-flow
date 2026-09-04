@@ -33,6 +33,21 @@ jobs:
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
+      - name: Use Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: services/collector/go.mod
+          cache-dependency-path: services/collector/go.sum
+
+      - name: Use Protocol Buffers compiler
+        uses: arduino/setup-protoc@v3
+        with:
+          version: '31.1'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Go protocol generator
+        run: go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10
+
       - name: Use supported npm and Yarn Classic
         run: |
           npm install --global npm@11
@@ -50,6 +65,21 @@ jobs:
 
       - name: Build
         run: yarn build
+
+      - name: Check generated protocol bindings
+        run: yarn proto:check
+
+      - name: Build Go collector
+        run: yarn go:build
+
+      - name: Vet Go collector
+        run: yarn go:vet
+
+      - name: Test Go collector
+        run: yarn go:test
+
+      - name: Race-test Go collector
+        run: yarn go:race
 
       - name: Check npm scope migration
         run: yarn scope:check
@@ -71,6 +101,9 @@ jobs:
 
       - name: Test real-infrastructure integrations
         run: yarn integration:test
+
+      - name: Test durable sink outage and crash recovery
+        run: yarn integration:durability
 
       - name: Stop real-infrastructure integration lab
         if: always()

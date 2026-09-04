@@ -122,6 +122,34 @@ developer's normal command. The preload initializes OpenTelemetry before applica
 loaded. OpenTelemetry instruments supported infrastructure clients, while NodeFlow adds semantic
 controller and provider boundaries and aggregates completed traces into a runtime map.
 
+### NodeFlow V2 Go collector
+
+V2.4 makes Go the default container collector and topology authority without moving Node.js-specific
+instrumentation out of TypeScript:
+
+```mermaid
+flowchart LR
+    App[Node.js or NestJS application] --> TS[TypeScript instrumentation]
+    TS -->|nodeflow.v1 Protobuf| Go[Go collector]
+    Go -->|normalized bounded batches| Engine[Go topology engine]
+    Engine --> State[Durable topology checkpoint]
+    Engine --> API[Snapshot, runtime, and WebSocket API]
+    API --> Dashboard[React dashboard]
+```
+
+Go owns validation, bounded admission, batching, fixed worker concurrency, backpressure, graceful
+shutdown, collector metrics, topology reconstruction, durable topology state, snapshot/runtime-path
+APIs, WebSocket publication, and static dashboard hosting. TypeScript continues to own
+Node.js/OpenTelemetry integration, NestJS discovery, and the React dashboard. The TypeScript engine
+remains available for differential tests and `NODEFLOW_TOPOLOGY_ENGINE=typescript` emergency
+rollback. The existing npm CLI still uses its embedded TypeScript collector until portable Go binary
+distribution is implemented; the Docker production path is Go-authoritative.
+
+The preferred V2 wire format is Protocol Buffers, while the existing JSON ingestion endpoints stay
+available for compatibility. See [the V2 architecture](./docs/architecture-v2.md),
+[migration design](./docs/migrations/collector-go-v2.md), and
+[Go collector runbook](./services/collector/README.md).
+
 ## Release and compatibility
 
 The current stable npm release is
@@ -392,13 +420,14 @@ filename is `nodeflow.config.ts`.
 
 ## Environment variables
 
-| Environment variable     | Default                  | Purpose                                     |
-| ------------------------ | ------------------------ | ------------------------------------------- |
-| `NODEFLOW_PORT`          | `7331`                   | Collector and dashboard port                |
-| `NODEFLOW_HOST`          | `127.0.0.1`              | Collector bind host                         |
-| `NODEFLOW_COLLECTOR_URL` | `http://127.0.0.1:7331`  | Shared collector used by `node-flow run`    |
-| `NODEFLOW_SERVICE_NAME`  | Application package name | Name reported by the instrumented process   |
-| `NODEFLOW_DEBUG`         | Disabled                 | Set to `1` to log telemetry export failures |
+| Environment variable       | Default                  | Purpose                                     |
+| -------------------------- | ------------------------ | ------------------------------------------- |
+| `NODEFLOW_PORT`            | `7331`                   | Collector and dashboard port                |
+| `NODEFLOW_HOST`            | `127.0.0.1`              | Collector bind host                         |
+| `NODEFLOW_COLLECTOR_URL`   | `http://127.0.0.1:7331`  | Shared collector used by `node-flow run`    |
+| `NODEFLOW_SERVICE_NAME`    | Application package name | Name reported by the instrumented process   |
+| `NODEFLOW_DEBUG`           | Disabled                 | Set to `1` to log telemetry export failures |
+| `NODEFLOW_EXPORT_PROTOCOL` | `json`                   | Use `protobuf` with the V2 Go collector     |
 
 Example:
 
@@ -492,8 +521,9 @@ topology is inserted directly. Controllers and services contain no tracing calls
 
 The Docker integration lab validates the package against actual infrastructure and the same public
 surface an external NestJS application uses. It starts PostgreSQL, MongoDB, Redis, RabbitMQ, a
-NestJS API, a NestJS queue worker, a local risk service, and one shared NodeFlow
-collector/dashboard.
+NestJS API, a NestJS queue worker, a local risk service, and the V2 Go collector/topology service.
+Instrumentation uses Protobuf through the Go boundary, and the TypeScript backend is not started in
+the default environment.
 
 Start the complete environment from the repository root:
 
@@ -505,6 +535,7 @@ This runs `docker compose up -d --build --wait`. When it completes, open:
 
 - API: [http://127.0.0.1:3000](http://127.0.0.1:3000)
 - NodeFlow dashboard: [http://127.0.0.1:7331](http://127.0.0.1:7331)
+- Go collector metrics: [http://127.0.0.1:4318/metrics](http://127.0.0.1:4318/metrics)
 - RabbitMQ management: [http://127.0.0.1:15672](http://127.0.0.1:15672)
 
 RabbitMQ uses the demo-only username and password `nodeflow`. All local defaults are documented in
@@ -552,12 +583,23 @@ Run the automated real-infrastructure assertions:
 
 ```bash
 yarn integration:test
+yarn integration:durability
 ```
 
 The test executes 100 PostgreSQL transactions and verifies they remain one architecture node. It
 also verifies every documented Mongoose and Redis operation, RabbitMQ producer and both consumer
 paths, outgoing HTTP, the cache miss/hit path, the local event listener, one correlated API-to-worker
 trace, and deterministic PostgreSQL, MongoDB, Redis, RabbitMQ, HTTP, business, and worker failures.
+The durability scenario verifies a graceful topology-state restart, interrupts Go topology
+checkpointing, admits telemetry to the segmented WAL, force-kills the process, and verifies restart
+replay and one canonical call. The contract remains at least once; bounded persisted span identity
+makes the controlled replay idempotent but is not an exactly-once guarantee.
+
+The compact topology compatibility corpus can be run without Docker:
+
+```bash
+yarn test:golden
+```
 
 Focused fixtures are available at `POST /integration/postgres`, `/mongoose`, `/redis`, `/rabbitmq`,
 and `/http`; the application flow is also exposed as `POST /payments`, `GET /payments/:id`, and
@@ -649,7 +691,8 @@ NODEFLOW_DEBUG=1 npx node-flow dev -- npm run start:dev
   Changeset controls the next release.
 - One `NodeFlowModule` import remains required because NestJS has no public preload-to-container
   discovery hook.
-- State is process-local and cleared on restart.
+- The Go container path durably restores topology state. The embedded npm CLI's TypeScript collector
+  remains process-local and clears state on restart.
 - Automatic provider discovery covers singleton class providers created during bootstrap.
 - Request-scoped, transient, and dynamically created providers are intentionally skipped.
 - Inherited methods, instance arrow functions, accessors, lifecycle hooks, framework providers, and

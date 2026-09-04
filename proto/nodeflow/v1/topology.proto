@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package nodeflow.v1;
+
+option go_package = "github.com/msHamed1/node-flow/services/collector/gen/nodeflow/v1;nodeflowv1";
+
+// This schema mirrors the existing stable NodeFlow architecture projection.
+// The Go collector does not produce it until topology-engine parity is proven.
+message ArchitectureSnapshot {
+  string version = 1;
+  string generated_at = 2;
+  Application application = 3;
+  repeated ArchitectureNode nodes = 4;
+  repeated ArchitectureEdge edges = 5;
+  repeated RuntimePath paths = 6;
+  SnapshotMetadata metadata = 7;
+}
+
+message SnapshotMetadata {
+  repeated string service_names = 1;
+}
+
+message Application {
+  string name = 1;
+  string runtime = 2;
+  string node_version = 3;
+}
+
+message ArchitectureNode {
+  string id = 1;
+  ArchitectureNodeType type = 2;
+  string name = 3;
+  string framework = 4;
+  ArchitectureNodeMetrics metrics = 5;
+}
+
+enum ArchitectureNodeType {
+  ARCHITECTURE_NODE_TYPE_UNSPECIFIED = 0;
+  ARCHITECTURE_NODE_TYPE_CONTROLLER = 1;
+  ARCHITECTURE_NODE_TYPE_SERVICE = 2;
+  ARCHITECTURE_NODE_TYPE_PROVIDER = 3;
+  ARCHITECTURE_NODE_TYPE_DATABASE = 4;
+  ARCHITECTURE_NODE_TYPE_CACHE = 5;
+  ARCHITECTURE_NODE_TYPE_QUEUE = 6;
+  ARCHITECTURE_NODE_TYPE_EXTERNAL_SERVICE = 7;
+  ARCHITECTURE_NODE_TYPE_HTTP = 8;
+  ARCHITECTURE_NODE_TYPE_UNKNOWN = 9;
+}
+
+message ArchitectureNodeMetrics {
+  uint64 call_count = 1;
+  uint64 error_count = 2;
+  double avg_duration_ms = 3;
+  double p50_duration_ms = 4;
+  double p95_duration_ms = 5;
+  double p99_duration_ms = 6;
+}
+
+message ArchitectureEdge {
+  string id = 1;
+  string source = 2;
+  string target = 3;
+  string type = 4;
+  ArchitectureEdgeMetrics metrics = 5;
+}
+
+message ArchitectureEdgeMetrics {
+  uint64 call_count = 1;
+  uint64 error_count = 2;
+  double avg_duration_ms = 3;
+  double p95_duration_ms = 4;
+}
+
+message RuntimePath {
+  string id = 1;
+  string entrypoint = 2;
+  repeated string nodes = 3;
+  uint64 calls = 4;
+  double avg_duration_ms = 5;
+  double p95_duration_ms = 6;
+  uint64 errors = 7;
+}
