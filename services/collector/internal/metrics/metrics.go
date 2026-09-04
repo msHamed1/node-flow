@@ -15,6 +15,7 @@ type Collector struct {
 	received        atomic.Uint64
 	processed       atomic.Uint64
 	rejectedFull    atomic.Uint64
+	rejectedSpool   atomic.Uint64
 	rejectedClosed  atomic.Uint64
 	rejectedInvalid atomic.Uint64
 	errors          atomic.Uint64
@@ -22,6 +23,14 @@ type Collector struct {
 	activeWorkers   atomic.Int64
 	topologyNodes   atomic.Int64
 	topologyEdges   atomic.Int64
+	spoolBytes      atomic.Int64
+	spoolActive     atomic.Int64
+	spoolQuarantine atomic.Int64
+	spoolRetries    atomic.Uint64
+	spoolReplayed   atomic.Uint64
+	spoolPermanent  atomic.Uint64
+	spoolCorrupt    atomic.Uint64
+	spoolDropped    atomic.Uint64
 	processing      *histogram
 	batchSize       *histogram
 }
@@ -48,10 +57,26 @@ func (c *Collector) SetTopology(nodes, edges int) {
 	c.topologyEdges.Store(int64(edges))
 }
 
+func (c *Collector) SetSpoolUsage(bytes int64, activeRecords int64, quarantinedRecords int64) {
+	c.spoolBytes.Store(bytes)
+	c.spoolActive.Store(activeRecords)
+	c.spoolQuarantine.Store(quarantinedRecords)
+}
+
+func (c *Collector) RecordSpoolRetry(records uint64)  { c.spoolRetries.Add(records) }
+func (c *Collector) RecordSpoolReplay(records uint64) { c.spoolReplayed.Add(records) }
+func (c *Collector) RecordSpoolCorruption()           { c.spoolCorrupt.Add(1); c.spoolDropped.Add(1) }
+func (c *Collector) RecordSpoolPermanent(records uint64) {
+	c.spoolPermanent.Add(records)
+	c.spoolDropped.Add(records)
+}
+
 func (c *Collector) RecordRejected(reason string, count uint64) {
 	switch reason {
 	case "queue_full":
 		c.rejectedFull.Add(count)
+	case "spool_full":
+		c.rejectedSpool.Add(count)
 	case "closed":
 		c.rejectedClosed.Add(count)
 	default:
@@ -72,6 +97,7 @@ func (c *Collector) writePrometheus(writer io.Writer) {
 	fmt.Fprintln(writer, "# HELP nodeflow_collector_telemetry_rejected_total Telemetry events rejected before processing.")
 	fmt.Fprintln(writer, "# TYPE nodeflow_collector_telemetry_rejected_total counter")
 	fmt.Fprintf(writer, "nodeflow_collector_telemetry_rejected_total{reason=\"queue_full\"} %d\n", c.rejectedFull.Load())
+	fmt.Fprintf(writer, "nodeflow_collector_telemetry_rejected_total{reason=\"spool_full\"} %d\n", c.rejectedSpool.Load())
 	fmt.Fprintf(writer, "nodeflow_collector_telemetry_rejected_total{reason=\"closed\"} %d\n", c.rejectedClosed.Load())
 	fmt.Fprintf(writer, "nodeflow_collector_telemetry_rejected_total{reason=\"invalid\"} %d\n", c.rejectedInvalid.Load())
 	writeCounter(writer, "nodeflow_collector_processing_errors_total", "Worker batches that the configured sink failed to process.", c.errors.Load())
@@ -79,6 +105,14 @@ func (c *Collector) writePrometheus(writer io.Writer) {
 	writeGauge(writer, "nodeflow_collector_active_workers", "Workers currently calling the configured sink.", c.activeWorkers.Load())
 	writeGauge(writer, "nodeflow_collector_topology_nodes", "Nodes reported by the downstream topology projection.", c.topologyNodes.Load())
 	writeGauge(writer, "nodeflow_collector_topology_edges", "Edges reported by the downstream topology projection.", c.topologyEdges.Load())
+	writeGauge(writer, "nodeflow_collector_spool_bytes", "Filesystem-allocated bytes retained by active and quarantined spool records.", c.spoolBytes.Load())
+	writeGauge(writer, "nodeflow_collector_spool_active_records", "Durable records awaiting successful delivery.", c.spoolActive.Load())
+	writeGauge(writer, "nodeflow_collector_spool_quarantined_records", "Corrupt or permanently failed records retained for inspection.", c.spoolQuarantine.Load())
+	writeCounter(writer, "nodeflow_collector_spool_retries_total", "Durable records checkpointed for another delivery attempt.", c.spoolRetries.Load())
+	writeCounter(writer, "nodeflow_collector_spool_replayed_total", "Durable records recovered when the collector started.", c.spoolReplayed.Load())
+	writeCounter(writer, "nodeflow_collector_spool_permanent_failures_total", "Durable records removed from active delivery after a permanent failure.", c.spoolPermanent.Load())
+	writeCounter(writer, "nodeflow_collector_spool_corruptions_total", "Unreadable durable records quarantined by recovery or dispatch.", c.spoolCorrupt.Load())
+	writeCounter(writer, "nodeflow_collector_spool_dropped_total", "Durable records removed from active delivery and quarantined.", c.spoolDropped.Load())
 	c.processing.write(writer, "nodeflow_collector_processing_duration_seconds", "End-to-end queue and sink latency for an admitted envelope.")
 	c.batchSize.write(writer, "nodeflow_collector_batch_size", "Telemetry events delivered in one worker batch.")
 

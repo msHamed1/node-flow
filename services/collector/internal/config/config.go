@@ -21,6 +21,13 @@ type Config struct {
 	SinkTimeout     time.Duration
 	ShutdownTimeout time.Duration
 	LogLevel        string
+	SpoolMode       string
+	SpoolDirectory  string
+	SpoolMaxBytes   int64
+	RetryInitial    time.Duration
+	RetryMax        time.Duration
+	RetryAttempts   int
+	RetryJitter     float64
 }
 
 func Load() (Config, error) {
@@ -40,6 +47,13 @@ func Load() (Config, error) {
 		SinkTimeout:     5 * time.Second,
 		ShutdownTimeout: 15 * time.Second,
 		LogLevel:        strings.ToLower(env("NODEFLOW_LOG_LEVEL", "info")),
+		SpoolMode:       strings.ToLower(env("NODEFLOW_SPOOL_MODE", "durable")),
+		SpoolDirectory:  env("NODEFLOW_SPOOL_DIR", ".nodeflow/spool"),
+		SpoolMaxBytes:   512 * 1_024 * 1_024,
+		RetryInitial:    100 * time.Millisecond,
+		RetryMax:        30 * time.Second,
+		RetryAttempts:   10,
+		RetryJitter:     0.2,
 	}
 	var err error
 	if config.Workers, err = integer("NODEFLOW_WORKERS", config.Workers); err != nil {
@@ -63,6 +77,21 @@ func Load() (Config, error) {
 	if config.ShutdownTimeout, err = duration("NODEFLOW_SHUTDOWN_TIMEOUT", config.ShutdownTimeout); err != nil {
 		return Config{}, err
 	}
+	if config.SpoolMaxBytes, err = integer64("NODEFLOW_SPOOL_MAX_BYTES", config.SpoolMaxBytes); err != nil {
+		return Config{}, err
+	}
+	if config.RetryInitial, err = duration("NODEFLOW_RETRY_INITIAL_BACKOFF", config.RetryInitial); err != nil {
+		return Config{}, err
+	}
+	if config.RetryMax, err = duration("NODEFLOW_RETRY_MAX_BACKOFF", config.RetryMax); err != nil {
+		return Config{}, err
+	}
+	if config.RetryAttempts, err = integer("NODEFLOW_RETRY_MAX_ATTEMPTS", config.RetryAttempts); err != nil {
+		return Config{}, err
+	}
+	if config.RetryJitter, err = decimal("NODEFLOW_RETRY_JITTER", config.RetryJitter); err != nil {
+		return Config{}, err
+	}
 	if config.Workers < 1 || config.QueueSize < 1 || config.BatchSize < 1 || config.BatchSize > config.QueueSize || config.MaxBodyBytes < 1 {
 		return Config{}, fmt.Errorf("collector limits must be positive and batch size cannot exceed queue size")
 	}
@@ -72,7 +101,26 @@ func Load() (Config, error) {
 	if config.LogLevel != "debug" && config.LogLevel != "info" && config.LogLevel != "warn" && config.LogLevel != "error" {
 		return Config{}, fmt.Errorf("NODEFLOW_LOG_LEVEL must be debug, info, warn, or error")
 	}
+	if config.SpoolMode != "durable" && config.SpoolMode != "memory" {
+		return Config{}, fmt.Errorf("NODEFLOW_SPOOL_MODE must be durable or memory")
+	}
+	if config.SpoolMaxBytes < 1 || config.RetryAttempts < 1 || config.RetryAttempts > 99_999 ||
+		config.RetryMax < config.RetryInitial || config.RetryJitter < 0 || config.RetryJitter > 1 {
+		return Config{}, fmt.Errorf("durable spool and retry settings are invalid")
+	}
 	return config, nil
+}
+
+func decimal(name string, fallback float64) (float64, error) {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be a decimal number: %w", name, err)
+	}
+	return value, nil
 }
 
 func env(name, fallback string) string {
