@@ -56,6 +56,14 @@ type result struct {
 	AverageRecordsCommit  float64 `json:"averageRecordsPerGroupCommit"`
 	DurableRetries        float64 `json:"durableRetries"`
 	WALDiskRejections     float64 `json:"walDiskPressureRejections"`
+	TopologyUpdates       float64 `json:"topologyUpdates"`
+	TopologyUpdatesSec    float64 `json:"topologyUpdatesPerSecond"`
+	SnapshotP95MS         float64 `json:"snapshotP95Ms"`
+	EndToEndP95MS         float64 `json:"collectorToTopologyP95Ms"`
+	CheckpointP95MS       float64 `json:"topologyCheckpointP95Ms"`
+	TopologyStateBytes    float64 `json:"topologyStateBytes"`
+	AllocatedBytes        float64 `json:"collectorAllocatedBytes"`
+	Allocations           float64 `json:"collectorAllocations"`
 }
 
 type counters struct {
@@ -164,6 +172,10 @@ func run(ctx context.Context, config config) (result, error) {
 	catchupStarted := time.Now()
 	drainComplete := waitUntilProcessed(ctx, client, config.target, before["nodeflow_collector_telemetry_processed_total"]+float64(accepted), 30*time.Second)
 	catchup := time.Since(catchupStarted)
+	snapshotP95, err := sampleSnapshotLatency(client, config.target, 200)
+	if err != nil {
+		return result{}, fmt.Errorf("sample topology snapshot: %w", err)
+	}
 	stopSampling()
 	peak := <-samples
 	after, err := scrape(client, config.target)
@@ -179,6 +191,7 @@ func run(ctx context.Context, config config) (result, error) {
 	fsyncs := after["nodeflow_collector_wal_fsync_duration_seconds_count"] - before["nodeflow_collector_wal_fsync_duration_seconds_count"]
 	groupCommits := after["nodeflow_collector_wal_records_per_group_commit_count"] - before["nodeflow_collector_wal_records_per_group_commit_count"]
 	groupRecords := after["nodeflow_collector_wal_records_per_group_commit_sum"] - before["nodeflow_collector_wal_records_per_group_commit_sum"]
+	topologyUpdates := after["nodeflow_collector_topology_updates_total"] - before["nodeflow_collector_topology_updates_total"]
 	averageRecords := float64(0)
 	if groupCommits > 0 {
 		averageRecords = groupRecords / groupCommits
@@ -208,7 +221,36 @@ func run(ctx context.Context, config config) (result, error) {
 		AverageRecordsCommit:  round(averageRecords),
 		DurableRetries:        after["nodeflow_collector_spool_retries_total"] - before["nodeflow_collector_spool_retries_total"],
 		WALDiskRejections:     after["nodeflow_collector_wal_disk_full_rejections_total"] - before["nodeflow_collector_wal_disk_full_rejections_total"],
+		TopologyUpdates:       topologyUpdates,
+		TopologyUpdatesSec:    round(topologyUpdates / (elapsed + catchup).Seconds()),
+		SnapshotP95MS:         snapshotP95,
+		EndToEndP95MS:         round(histogramQuantileDelta(before, after, "nodeflow_collector_processing_duration_seconds", 0.95) * 1_000),
+		CheckpointP95MS:       round(histogramQuantileDelta(before, after, "nodeflow_collector_topology_checkpoint_duration_seconds", 0.95) * 1_000),
+		TopologyStateBytes:    after["nodeflow_collector_topology_state_bytes"],
+		AllocatedBytes:        after["nodeflow_collector_process_allocated_bytes_total"] - before["nodeflow_collector_process_allocated_bytes_total"],
+		Allocations:           after["nodeflow_collector_process_allocations_total"] - before["nodeflow_collector_process_allocations_total"],
 	}, nil
+}
+
+func sampleSnapshotLatency(client *http.Client, target string, count int) (float64, error) {
+	latencies := make([]float64, 0, count)
+	for index := 0; index < count; index++ {
+		started := time.Now()
+		response, err := client.Get(target + "/api/snapshot")
+		if err != nil {
+			return 0, err
+		}
+		_, readErr := io.Copy(io.Discard, io.LimitReader(response.Body, 16*1_024*1_024))
+		response.Body.Close()
+		if readErr != nil {
+			return 0, readErr
+		}
+		if response.StatusCode != http.StatusOK {
+			return 0, fmt.Errorf("snapshot returned HTTP %d", response.StatusCode)
+		}
+		latencies = append(latencies, float64(time.Since(started).Microseconds())/1_000)
+	}
+	return percentile(latencies, .95), nil
 }
 
 var sequence atomic.Uint64
@@ -339,7 +381,7 @@ func scrape(client *http.Client, target string) (map[string]float64, error) {
 	}
 	values := make(map[string]float64)
 	for _, line := range strings.Split(string(data), "\n") {
-		if line == "" || strings.HasPrefix(line, "#") || strings.Contains(line, "{") {
+		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
 		fields := strings.Fields(line)
@@ -351,6 +393,38 @@ func scrape(client *http.Client, target string) (map[string]float64, error) {
 		}
 	}
 	return values, nil
+}
+
+func histogramQuantileDelta(before, after map[string]float64, name string, quantile float64) float64 {
+	total := after[name+"_count"] - before[name+"_count"]
+	if total <= 0 {
+		return 0
+	}
+	type bucket struct {
+		upper float64
+		count float64
+	}
+	buckets := make([]bucket, 0)
+	prefix := name + `_bucket{le="`
+	for key, current := range after {
+		if !strings.HasPrefix(key, prefix) || !strings.HasSuffix(key, `"}`) {
+			continue
+		}
+		raw := strings.TrimSuffix(strings.TrimPrefix(key, prefix), `"}`)
+		upper, err := strconv.ParseFloat(raw, 64)
+		if err != nil || math.IsInf(upper, 1) {
+			continue
+		}
+		buckets = append(buckets, bucket{upper: upper, count: current - before[key]})
+	}
+	sort.Slice(buckets, func(i, j int) bool { return buckets[i].upper < buckets[j].upper })
+	target := total * quantile
+	for _, candidate := range buckets {
+		if candidate.count >= target {
+			return candidate.upper
+		}
+	}
+	return 0
 }
 
 func percentile(values []float64, quantile float64) float64 {

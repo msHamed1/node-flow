@@ -168,7 +168,7 @@ console.log(`Validated ${snapshot.traces.length} recent traces with operation-le
 console.log(
   'Real PostgreSQL, MongoDB/Mongoose, Redis, RabbitMQ, HTTP, local-event, worker, and deterministic error flows passed.',
 );
-console.log('TypeScript instrumentation → Protobuf → Go collector → TypeScript topology passed.');
+console.log('TypeScript instrumentation → Protobuf → Go collector/topology passed.');
 
 async function post(path, body = {}) {
   const response = await fetch(`${apiUrl}${path}`, {
