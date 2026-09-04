@@ -47,7 +47,15 @@ type result struct {
 	PeakHeapBytes         float64 `json:"peakCollectorHeapBytes"`
 	PeakQueueDepth        float64 `json:"peakQueueDepth"`
 	PeakSpoolBytes        float64 `json:"peakSpoolBytes"`
+	PeakWALBytes          float64 `json:"peakWalBytes"`
+	PeakWALSegments       float64 `json:"peakWalSegments"`
 	AverageCPUPercent     float64 `json:"averageCollectorCpuPercent"`
+	WALFsyncs             float64 `json:"walFsyncs"`
+	WALFsyncsPerSecond    float64 `json:"walFsyncsPerSecond"`
+	WALGroupCommits       float64 `json:"walGroupCommits"`
+	AverageRecordsCommit  float64 `json:"averageRecordsPerGroupCommit"`
+	DurableRetries        float64 `json:"durableRetries"`
+	WALDiskRejections     float64 `json:"walDiskPressureRejections"`
 }
 
 type counters struct {
@@ -60,10 +68,12 @@ type counters struct {
 }
 
 type sample struct {
-	heap  float64
-	queue float64
-	spool float64
-	cpu   float64
+	heap     float64
+	queue    float64
+	spool    float64
+	wal      float64
+	segments float64
+	cpu      float64
 }
 
 func main() {
@@ -166,6 +176,13 @@ func run(ctx context.Context, config config) (result, error) {
 	state.mutex.Unlock()
 	cpuDelta := after["nodeflow_collector_process_cpu_seconds_total"] - before["nodeflow_collector_process_cpu_seconds_total"]
 	processed := uint64(max(0, after["nodeflow_collector_telemetry_processed_total"]-before["nodeflow_collector_telemetry_processed_total"]))
+	fsyncs := after["nodeflow_collector_wal_fsync_duration_seconds_count"] - before["nodeflow_collector_wal_fsync_duration_seconds_count"]
+	groupCommits := after["nodeflow_collector_wal_records_per_group_commit_count"] - before["nodeflow_collector_wal_records_per_group_commit_count"]
+	groupRecords := after["nodeflow_collector_wal_records_per_group_commit_sum"] - before["nodeflow_collector_wal_records_per_group_commit_sum"]
+	averageRecords := float64(0)
+	if groupCommits > 0 {
+		averageRecords = groupRecords / groupCommits
+	}
 	return result{
 		TargetEventsPerSecond: config.rate,
 		DurationSeconds:       round(elapsed.Seconds()),
@@ -182,7 +199,15 @@ func run(ctx context.Context, config config) (result, error) {
 		PeakHeapBytes:         peak.heap,
 		PeakQueueDepth:        peak.queue,
 		PeakSpoolBytes:        peak.spool,
+		PeakWALBytes:          peak.wal,
+		PeakWALSegments:       peak.segments,
 		AverageCPUPercent:     round(cpuDelta / (elapsed + catchup).Seconds() * 100),
+		WALFsyncs:             fsyncs,
+		WALFsyncsPerSecond:    round(fsyncs / elapsed.Seconds()),
+		WALGroupCommits:       groupCommits,
+		AverageRecordsCommit:  round(averageRecords),
+		DurableRetries:        after["nodeflow_collector_spool_retries_total"] - before["nodeflow_collector_spool_retries_total"],
+		WALDiskRejections:     after["nodeflow_collector_wal_disk_full_rejections_total"] - before["nodeflow_collector_wal_disk_full_rejections_total"],
 	}, nil
 }
 
@@ -295,6 +320,8 @@ func sampleMetrics(ctx context.Context, client *http.Client, target string, resu
 				peak.heap = max(peak.heap, values["nodeflow_collector_process_heap_bytes"])
 				peak.queue = max(peak.queue, values["nodeflow_collector_queue_depth"])
 				peak.spool = max(peak.spool, values["nodeflow_collector_spool_bytes"])
+				peak.wal = max(peak.wal, values["nodeflow_collector_wal_bytes"])
+				peak.segments = max(peak.segments, values["nodeflow_collector_wal_segments"])
 			}
 		}
 	}

@@ -31,16 +31,54 @@ type Collector struct {
 	spoolPermanent  atomic.Uint64
 	spoolCorrupt    atomic.Uint64
 	spoolDropped    atomic.Uint64
+	walBytes        atomic.Int64
+	walSegments     atomic.Int64
+	walPending      atomic.Int64
+	walQuarantine   atomic.Int64
+	walReplayed     atomic.Uint64
+	walCompactions  atomic.Uint64
+	walCompacted    atomic.Uint64
+	walCorrupt      atomic.Uint64
+	walDiskReject   atomic.Uint64
 	processing      *histogram
 	batchSize       *histogram
+	walAppend       *histogram
+	walSync         *histogram
+	walGroupRecords *histogram
+	walCompaction   *histogram
 }
 
 func New() *Collector {
 	return &Collector{
-		processing: newHistogram([]float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}),
-		batchSize:  newHistogram([]float64{1, 10, 25, 50, 100, 250, 500, 1_000, 5_000}),
+		processing:      newHistogram([]float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}),
+		batchSize:       newHistogram([]float64{1, 10, 25, 50, 100, 250, 500, 1_000, 5_000}),
+		walAppend:       newHistogram([]float64{0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1}),
+		walSync:         newHistogram([]float64{0.0001, 0.00025, 0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1}),
+		walGroupRecords: newHistogram([]float64{1, 2, 4, 8, 16, 32, 64, 128, 256, 512}),
+		walCompaction:   newHistogram([]float64{0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 1}),
 	}
 }
+
+func (c *Collector) SetWALUsage(bytes int64, segments int64, pendingRecords int64, quarantinedRecords int64) {
+	c.walBytes.Store(bytes)
+	c.walSegments.Store(segments)
+	c.walPending.Store(pendingRecords)
+	c.walQuarantine.Store(quarantinedRecords)
+	// Keep the V2.1 generic spool series stable for existing dashboards.
+	c.SetSpoolUsage(bytes, pendingRecords, quarantinedRecords)
+}
+
+func (c *Collector) ObserveWALAppend(elapsed time.Duration) { c.walAppend.observe(elapsed.Seconds()) }
+func (c *Collector) ObserveWALSync(elapsed time.Duration)   { c.walSync.observe(elapsed.Seconds()) }
+func (c *Collector) ObserveWALGroupCommit(records int)      { c.walGroupRecords.observe(float64(records)) }
+func (c *Collector) ObserveWALCompaction(elapsed time.Duration, segments int) {
+	c.walCompactions.Add(1)
+	c.walCompacted.Add(uint64(segments))
+	c.walCompaction.observe(elapsed.Seconds())
+}
+func (c *Collector) RecordWALCorruption()                      { c.walCorrupt.Add(1) }
+func (c *Collector) RecordWALReplay(records uint64)            { c.walReplayed.Add(records) }
+func (c *Collector) RecordWALDiskFullRejection(records uint64) { c.walDiskReject.Add(records) }
 
 func (c *Collector) RecordReceived(count uint64)  { c.received.Add(count) }
 func (c *Collector) RecordProcessed(count uint64) { c.processed.Add(count) }
@@ -113,6 +151,19 @@ func (c *Collector) writePrometheus(writer io.Writer) {
 	writeCounter(writer, "nodeflow_collector_spool_permanent_failures_total", "Durable records removed from active delivery after a permanent failure.", c.spoolPermanent.Load())
 	writeCounter(writer, "nodeflow_collector_spool_corruptions_total", "Unreadable durable records quarantined by recovery or dispatch.", c.spoolCorrupt.Load())
 	writeCounter(writer, "nodeflow_collector_spool_dropped_total", "Durable records removed from active delivery and quarantined.", c.spoolDropped.Load())
+	writeGauge(writer, "nodeflow_collector_wal_bytes", "Logical bytes retained by WAL segment and checkpoint files.", c.walBytes.Load())
+	writeGauge(writer, "nodeflow_collector_wal_segments", "WAL segments currently retained.", c.walSegments.Load())
+	writeGauge(writer, "nodeflow_collector_wal_pending_records", "Committed WAL records awaiting successful delivery.", c.walPending.Load())
+	writeGauge(writer, "nodeflow_collector_wal_quarantined_records", "Permanently failed WAL records retained for inspection.", c.walQuarantine.Load())
+	writeCounter(writer, "nodeflow_collector_wal_replayed_total", "Committed WAL records recovered when the collector started.", c.walReplayed.Load())
+	writeCounter(writer, "nodeflow_collector_wal_compactions_total", "Successful WAL compaction passes that removed segments.", c.walCompactions.Load())
+	writeCounter(writer, "nodeflow_collector_wal_segments_compacted_total", "Fully acknowledged WAL segments removed by compaction.", c.walCompacted.Load())
+	writeCounter(writer, "nodeflow_collector_wal_corruptions_total", "WAL checksum, framing, or committed-record corruption detections.", c.walCorrupt.Load())
+	writeCounter(writer, "nodeflow_collector_wal_disk_full_rejections_total", "WAL records rejected to preserve the configured disk bound.", c.walDiskReject.Load())
+	c.walAppend.write(writer, "nodeflow_collector_wal_append_duration_seconds", "Request admission latency through durable WAL group commit.")
+	c.walSync.write(writer, "nodeflow_collector_wal_fsync_duration_seconds", "Latency of WAL data and checkpoint fsync operations.")
+	c.walGroupRecords.write(writer, "nodeflow_collector_wal_records_per_group_commit", "Records made durable by each WAL fsync group.")
+	c.walCompaction.write(writer, "nodeflow_collector_wal_compaction_duration_seconds", "Latency of WAL segment compaction passes that removed data.")
 	c.processing.write(writer, "nodeflow_collector_processing_duration_seconds", "End-to-end queue and sink latency for an admitted envelope.")
 	c.batchSize.write(writer, "nodeflow_collector_batch_size", "Telemetry events delivered in one worker batch.")
 

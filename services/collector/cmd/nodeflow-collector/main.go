@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/msHamed1/node-flow/services/collector/internal/config"
 	collectormetrics "github.com/msHamed1/node-flow/services/collector/internal/metrics"
@@ -26,8 +27,8 @@ func main() {
 	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel(config.LogLevel)}))
 	metrics := collectormetrics.New()
-	var durableSpool *spool.Store
-	if config.SpoolMode == "durable" {
+	var durableSpool spool.Storage
+	if config.SpoolMode == "legacy" {
 		var recovery spool.Recovery
 		durableSpool, recovery, err = spool.Open(spool.Config{
 			Directory: config.SpoolDirectory, MaxBytes: config.SpoolMaxBytes,
@@ -39,6 +40,30 @@ func main() {
 		logger.Info("durable collector spool ready", "directory", config.SpoolDirectory,
 			"max_bytes", config.SpoolMaxBytes, "recovered_records", recovery.Records,
 			"recovered_bytes", recovery.Bytes, "corruptions", recovery.Corruptions)
+	} else if config.SpoolMode == "group-commit" || config.SpoolMode == "sync" {
+		groupRecords, groupDelay := config.WALBatchRecords, config.WALFlushInterval
+		if config.SpoolMode == "sync" {
+			groupRecords = 1
+			groupDelay = time.Nanosecond
+		}
+		var recovery spool.Recovery
+		durableSpool, recovery, err = spool.OpenWAL(spool.WALConfig{
+			Directory: config.SpoolDirectory, MaxBytes: config.SpoolMaxBytes,
+			SegmentBytes: config.WALSegmentBytes, MaxBatchRecords: groupRecords,
+			MaxFlushInterval: groupDelay, AppendQueueSize: config.WALAppendQueue,
+			MaxRecordAttempts: config.RetryAttempts,
+		}, metrics)
+		if err != nil {
+			fatal("open collector WAL", err)
+		}
+		metrics.RecordSpoolReplay(uint64(recovery.Records))
+		metrics.RecordWALReplay(uint64(recovery.Records))
+		logger.Info("collector WAL ready", "directory", config.SpoolDirectory,
+			"mode", config.SpoolMode, "max_bytes", config.SpoolMaxBytes,
+			"segment_bytes", config.WALSegmentBytes, "group_max_records", groupRecords,
+			"group_max_delay", groupDelay.String(), "recovered_records", recovery.Records,
+			"recovered_bytes", recovery.Bytes, "segments", recovery.Segments,
+			"truncated_bytes", recovery.Truncated, "corruptions", recovery.Corruptions)
 	}
 
 	var telemetrySink pipeline.Sink

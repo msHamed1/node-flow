@@ -10,24 +10,28 @@ import (
 )
 
 type Config struct {
-	ListenAddress   string
-	TopologyURL     string
-	Sink            string
-	Workers         int
-	QueueSize       int
-	BatchSize       int
-	FlushInterval   time.Duration
-	MaxBodyBytes    int64
-	SinkTimeout     time.Duration
-	ShutdownTimeout time.Duration
-	LogLevel        string
-	SpoolMode       string
-	SpoolDirectory  string
-	SpoolMaxBytes   int64
-	RetryInitial    time.Duration
-	RetryMax        time.Duration
-	RetryAttempts   int
-	RetryJitter     float64
+	ListenAddress    string
+	TopologyURL      string
+	Sink             string
+	Workers          int
+	QueueSize        int
+	BatchSize        int
+	FlushInterval    time.Duration
+	MaxBodyBytes     int64
+	SinkTimeout      time.Duration
+	ShutdownTimeout  time.Duration
+	LogLevel         string
+	SpoolMode        string
+	SpoolDirectory   string
+	SpoolMaxBytes    int64
+	WALSegmentBytes  int64
+	WALBatchRecords  int
+	WALFlushInterval time.Duration
+	WALAppendQueue   int
+	RetryInitial     time.Duration
+	RetryMax         time.Duration
+	RetryAttempts    int
+	RetryJitter      float64
 }
 
 func Load() (Config, error) {
@@ -36,24 +40,28 @@ func Load() (Config, error) {
 		workers = 32
 	}
 	config := Config{
-		ListenAddress:   env("NODEFLOW_GO_LISTEN_ADDR", ":4318"),
-		TopologyURL:     env("NODEFLOW_TOPOLOGY_URL", "http://127.0.0.1:7331"),
-		Sink:            strings.ToLower(env("NODEFLOW_SINK", "http")),
-		Workers:         workers,
-		QueueSize:       10_000,
-		BatchSize:       250,
-		FlushInterval:   500 * time.Millisecond,
-		MaxBodyBytes:    2 * 1_024 * 1_024,
-		SinkTimeout:     5 * time.Second,
-		ShutdownTimeout: 15 * time.Second,
-		LogLevel:        strings.ToLower(env("NODEFLOW_LOG_LEVEL", "info")),
-		SpoolMode:       strings.ToLower(env("NODEFLOW_SPOOL_MODE", "durable")),
-		SpoolDirectory:  env("NODEFLOW_SPOOL_DIR", ".nodeflow/spool"),
-		SpoolMaxBytes:   512 * 1_024 * 1_024,
-		RetryInitial:    100 * time.Millisecond,
-		RetryMax:        30 * time.Second,
-		RetryAttempts:   10,
-		RetryJitter:     0.2,
+		ListenAddress:    env("NODEFLOW_GO_LISTEN_ADDR", ":4318"),
+		TopologyURL:      env("NODEFLOW_TOPOLOGY_URL", "http://127.0.0.1:7331"),
+		Sink:             strings.ToLower(env("NODEFLOW_SINK", "http")),
+		Workers:          workers,
+		QueueSize:        10_000,
+		BatchSize:        250,
+		FlushInterval:    500 * time.Millisecond,
+		MaxBodyBytes:     2 * 1_024 * 1_024,
+		SinkTimeout:      5 * time.Second,
+		ShutdownTimeout:  15 * time.Second,
+		LogLevel:         strings.ToLower(env("NODEFLOW_LOG_LEVEL", "info")),
+		SpoolMode:        strings.ToLower(env("NODEFLOW_SPOOL_MODE", "group-commit")),
+		SpoolDirectory:   env("NODEFLOW_SPOOL_DIR", ".nodeflow/spool"),
+		SpoolMaxBytes:    512 * 1_024 * 1_024,
+		WALSegmentBytes:  16 * 1_024 * 1_024,
+		WALBatchRecords:  64,
+		WALFlushInterval: 2 * time.Millisecond,
+		WALAppendQueue:   2_048,
+		RetryInitial:     100 * time.Millisecond,
+		RetryMax:         30 * time.Second,
+		RetryAttempts:    10,
+		RetryJitter:      0.2,
 	}
 	var err error
 	if config.Workers, err = integer("NODEFLOW_WORKERS", config.Workers); err != nil {
@@ -80,6 +88,18 @@ func Load() (Config, error) {
 	if config.SpoolMaxBytes, err = integer64("NODEFLOW_SPOOL_MAX_BYTES", config.SpoolMaxBytes); err != nil {
 		return Config{}, err
 	}
+	if config.WALSegmentBytes, err = integer64("NODEFLOW_WAL_SEGMENT_BYTES", config.WALSegmentBytes); err != nil {
+		return Config{}, err
+	}
+	if config.WALBatchRecords, err = integer("NODEFLOW_WAL_GROUP_MAX_RECORDS", config.WALBatchRecords); err != nil {
+		return Config{}, err
+	}
+	if config.WALFlushInterval, err = duration("NODEFLOW_WAL_GROUP_MAX_DELAY", config.WALFlushInterval); err != nil {
+		return Config{}, err
+	}
+	if config.WALAppendQueue, err = integer("NODEFLOW_WAL_APPEND_QUEUE_SIZE", config.WALAppendQueue); err != nil {
+		return Config{}, err
+	}
 	if config.RetryInitial, err = duration("NODEFLOW_RETRY_INITIAL_BACKOFF", config.RetryInitial); err != nil {
 		return Config{}, err
 	}
@@ -101,12 +121,21 @@ func Load() (Config, error) {
 	if config.LogLevel != "debug" && config.LogLevel != "info" && config.LogLevel != "warn" && config.LogLevel != "error" {
 		return Config{}, fmt.Errorf("NODEFLOW_LOG_LEVEL must be debug, info, warn, or error")
 	}
-	if config.SpoolMode != "durable" && config.SpoolMode != "memory" {
-		return Config{}, fmt.Errorf("NODEFLOW_SPOOL_MODE must be durable or memory")
+	if config.SpoolMode == "durable" {
+		config.SpoolMode = "group-commit"
+	}
+	if config.SpoolMode != "group-commit" && config.SpoolMode != "sync" &&
+		config.SpoolMode != "legacy" && config.SpoolMode != "memory" {
+		return Config{}, fmt.Errorf("NODEFLOW_SPOOL_MODE must be group-commit, sync, legacy, durable, or memory")
 	}
 	if config.SpoolMaxBytes < 1 || config.RetryAttempts < 1 || config.RetryAttempts > 99_999 ||
 		config.RetryMax < config.RetryInitial || config.RetryJitter < 0 || config.RetryJitter > 1 {
 		return Config{}, fmt.Errorf("durable spool and retry settings are invalid")
+	}
+	if (config.SpoolMode == "group-commit" || config.SpoolMode == "sync") &&
+		(config.WALSegmentBytes < config.MaxBodyBytes+4_096 || config.WALSegmentBytes > int64(^uint32(0)) ||
+			config.WALBatchRecords < 1 || config.WALAppendQueue < 1) {
+		return Config{}, fmt.Errorf("WAL segment and group commit settings are invalid")
 	}
 	return config, nil
 }

@@ -36,7 +36,7 @@ type Config struct {
 	QueueSize     int
 	BatchSize     int
 	FlushInterval time.Duration
-	Spool         *spool.Store
+	Spool         spool.Storage
 	Retry         RetryConfig
 }
 
@@ -52,7 +52,7 @@ type Pipeline struct {
 	sink       Sink
 	metrics    *collectormetrics.Collector
 	logger     *slog.Logger
-	spool      *spool.Store
+	spool      spool.Storage
 	retry      RetryConfig
 	queue      chan *item
 	jobs       []chan []*item
@@ -60,15 +60,20 @@ type Pipeline struct {
 	cancel     context.CancelFunc
 	mutex      sync.RWMutex
 	stateMutex sync.Mutex
-	accepting  bool
-	inFlight   map[uint64]struct{}
-	waiters    map[uint64]chan result
-	wake       chan struct{}
-	closeOnce  sync.Once
-	loader     sync.WaitGroup
-	workers    sync.WaitGroup
-	dispatcher sync.WaitGroup
-	done       chan struct{}
+	// admissionBarrier lets WAL appends group concurrently while ensuring the
+	// loader cannot publish before a Submit waiter exists. The loader also holds
+	// stateMutex while reading storage so a just-acknowledged stale read cannot be
+	// re-enqueued after its in-flight marker is released.
+	admissionBarrier sync.RWMutex
+	accepting        bool
+	inFlight         map[uint64]struct{}
+	waiters          map[uint64]chan result
+	wake             chan struct{}
+	closeOnce        sync.Once
+	loader           sync.WaitGroup
+	workers          sync.WaitGroup
+	dispatcher       sync.WaitGroup
+	done             chan struct{}
 }
 
 type item struct {
@@ -136,8 +141,8 @@ func (p *Pipeline) Submit(ctx context.Context, envelope telemetry.Envelope) (Out
 }
 
 // Enqueue admits an envelope without waiting for the sink. In durable mode it
-// returns only after the record and directory entry are synced; in memory mode
-// it returns after bounded channel admission.
+// returns only after the storage implementation's documented durability
+// boundary; in memory mode it returns after bounded channel admission.
 func (p *Pipeline) Enqueue(ctx context.Context, envelope telemetry.Envelope) error {
 	_, err := p.enqueue(ctx, envelope, false)
 	return err
@@ -158,15 +163,21 @@ func (p *Pipeline) enqueue(ctx context.Context, envelope telemetry.Envelope, wai
 		return nil, ErrClosed
 	}
 	if p.spool != nil {
-		p.stateMutex.Lock()
+		p.admissionBarrier.RLock()
 		record, err := p.spool.Append(ctx, envelope)
 		if err == nil && entry.result != nil {
+			p.stateMutex.Lock()
 			p.waiters[record.ID] = entry.result
+			p.stateMutex.Unlock()
 		}
-		p.stateMutex.Unlock()
+		p.admissionBarrier.RUnlock()
 		p.mutex.RUnlock()
 		p.signalLoader()
 		if err != nil {
+			if errors.Is(err, spool.ErrBusy) {
+				p.metrics.RecordRejected("queue_full", eventCount)
+				return nil, ErrQueueFull
+			}
 			if errors.Is(err, spool.ErrFull) {
 				p.metrics.RecordRejected("spool_full", eventCount)
 				return nil, ErrSpoolFull
@@ -262,8 +273,12 @@ func (p *Pipeline) loadDurableRecords() {
 	defer close(p.queue)
 	var cursor uint64
 	for {
+		p.admissionBarrier.Lock()
+		p.stateMutex.Lock()
 		record, found, err := p.spool.NextAfter(cursor)
 		if err != nil {
+			p.stateMutex.Unlock()
+			p.admissionBarrier.Unlock()
 			if errors.Is(err, spool.ErrCorruptRecord) {
 				cursor = record.ID
 				p.logger.Error("quarantined corrupt spool record", "record_id", record.ID, "error", err)
@@ -277,14 +292,15 @@ func (p *Pipeline) loadDurableRecords() {
 		}
 		if found {
 			cursor = record.ID
-			p.stateMutex.Lock()
 			if _, exists := p.inFlight[record.ID]; exists {
 				p.stateMutex.Unlock()
+				p.admissionBarrier.Unlock()
 				continue
 			}
 			p.inFlight[record.ID] = struct{}{}
 			waiter := p.waiters[record.ID]
 			p.stateMutex.Unlock()
+			p.admissionBarrier.Unlock()
 			entry := &item{
 				envelope: record.Envelope, received: record.EnqueuedAt, result: waiter, record: &record,
 			}
@@ -297,6 +313,8 @@ func (p *Pipeline) loadDurableRecords() {
 			}
 			continue
 		}
+		p.stateMutex.Unlock()
+		p.admissionBarrier.Unlock()
 
 		cursor = 0
 		p.mutex.RLock()

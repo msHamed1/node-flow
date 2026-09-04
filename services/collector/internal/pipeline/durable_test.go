@@ -3,11 +3,13 @@ package pipeline
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -91,6 +93,99 @@ func TestDurablePipelineReplaysUnacknowledgedRecordsAfterCrashRestart(t *testing
 	}
 	if !strings.Contains(scrapeMetrics(metrics), "nodeflow_collector_spool_replayed_total 1") {
 		t.Fatal("replay metric was not recorded")
+	}
+}
+
+func TestWALPipelineRetriesSinkOutageAndPreservesServiceOrder(t *testing.T) {
+	metrics := collectormetrics.New()
+	store := openTestWAL(t, metrics, 5)
+	sink := &recoveringSink{failures: 1, delivered: make(chan struct{}, 2)}
+	processor := newDurablePipeline(t, store, sink, metrics, 5)
+
+	if err := processor.Enqueue(context.Background(), namedEnvelope("one")); err != nil {
+		t.Fatal(err)
+	}
+	if err := processor.Enqueue(context.Background(), namedEnvelope("two")); err != nil {
+		t.Fatal(err)
+	}
+	processor.CloseAdmission()
+	if err := processor.Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	sink.mutex.Lock()
+	calls := append([]string(nil), sink.calls...)
+	sink.mutex.Unlock()
+	if strings.Join(calls, ",") != "one,one,two" {
+		t.Fatalf("WAL retry reordered service records: %v", calls)
+	}
+	if stats := store.Stats(); stats.ActiveRecords != 0 {
+		t.Fatalf("WAL retained delivered records: %#v", stats)
+	}
+}
+
+func TestWALPipelineReplaysAfterCollectorRestart(t *testing.T) {
+	directory := t.TempDir()
+	first := openWALAt(t, directory, nil, 5)
+	if _, err := first.Append(context.Background(), namedEnvelope("before-crash")); err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+	metrics := collectormetrics.New()
+	restarted, recovery, err := spool.OpenWAL(testPipelineWALConfig(directory, 5), metrics)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recovery.Records != 1 {
+		t.Fatalf("expected one WAL replay record, got %#v", recovery)
+	}
+	sink := &recoveringSink{delivered: make(chan struct{}, 1)}
+	processor := newDurablePipeline(t, restarted, sink, metrics, 5)
+	processor.CloseAdmission()
+	if err := processor.Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	sink.mutex.Lock()
+	defer sink.mutex.Unlock()
+	if strings.Join(sink.calls, ",") != "before-crash" {
+		t.Fatalf("unexpected WAL replay calls: %v", sink.calls)
+	}
+}
+
+func TestWALPipelineDoesNotDuplicateConcurrentAdmissions(t *testing.T) {
+	metrics := collectormetrics.New()
+	store := openTestWAL(t, metrics, 5)
+	sink := &countingSink{}
+	processor, err := New(Config{
+		Workers: 4, QueueSize: 256, BatchSize: 25, FlushInterval: time.Millisecond, Spool: store,
+		Retry: RetryConfig{InitialBackoff: time.Millisecond, MaxBackoff: 5 * time.Millisecond, MaxAttempts: 5},
+	}, sink, metrics, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const admissions = 500
+	errors := make(chan error, admissions)
+	for index := range admissions {
+		go func(index int) {
+			errors <- processor.Enqueue(context.Background(), namedEnvelope(fmt.Sprintf("%d", index)))
+		}(index)
+	}
+	for range admissions {
+		if err := <-errors; err != nil {
+			t.Fatal(err)
+		}
+	}
+	waitFor(t, func() bool { return store.Stats().ActiveRecords == 0 }, "WAL admissions did not drain")
+	// Keep admission open long enough for the loader to rescan from sequence zero;
+	// this catches a stale-read race between checkpointing and in-flight release.
+	time.Sleep(20 * time.Millisecond)
+	processor.CloseAdmission()
+	if err := processor.Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := sink.count.Load(); got != admissions {
+		t.Fatalf("delivered %d envelopes for %d admissions", got, admissions)
 	}
 }
 
@@ -211,6 +306,15 @@ type cancellationSink struct {
 	entered chan struct{}
 }
 
+type countingSink struct{ count atomic.Int64 }
+
+func (sink *countingSink) ConsumeBatch(_ context.Context, envelopes []telemetry.Envelope) ([]Outcome, error) {
+	sink.count.Add(int64(len(envelopes)))
+	return make([]Outcome, len(envelopes)), nil
+}
+func (*countingSink) Ready(context.Context) error { return nil }
+func (*countingSink) Close() error                { return nil }
+
 func (sink *cancellationSink) ConsumeBatch(ctx context.Context, _ []telemetry.Envelope) ([]Outcome, error) {
 	close(sink.entered)
 	<-ctx.Done()
@@ -231,9 +335,35 @@ func openTestSpool(t *testing.T, metrics *collectormetrics.Collector) *spool.Sto
 	return store
 }
 
+func openTestWAL(t *testing.T, metrics *collectormetrics.Collector, maxAttempts int) *spool.WAL {
+	t.Helper()
+	return openWALAt(t, t.TempDir(), metrics, maxAttempts)
+}
+
+func openWALAt(t *testing.T, directory string, metrics *collectormetrics.Collector, maxAttempts int) *spool.WAL {
+	t.Helper()
+	var observer spool.WALObserver
+	if metrics != nil {
+		observer = metrics
+	}
+	store, _, err := spool.OpenWAL(testPipelineWALConfig(directory, maxAttempts), observer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store
+}
+
+func testPipelineWALConfig(directory string, maxAttempts int) spool.WALConfig {
+	return spool.WALConfig{
+		Directory: directory, MaxBytes: 1024 * 1024, SegmentBytes: 1024 * 1024,
+		MaxBatchRecords: 8, MaxFlushInterval: time.Millisecond,
+		AppendQueueSize: 1024, MaxRecordAttempts: maxAttempts,
+	}
+}
+
 func newDurablePipeline(
 	t *testing.T,
-	store *spool.Store,
+	store spool.Storage,
 	sink Sink,
 	metrics *collectormetrics.Collector,
 	maxAttempts int,
