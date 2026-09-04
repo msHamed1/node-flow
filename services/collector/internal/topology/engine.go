@@ -92,6 +92,9 @@ type Engine struct {
 	applicationNames  map[string]bool
 	nodeVersion       string
 	clock             uint64
+	revision          uint64
+	runtime           *RuntimeMetrics
+	activity          Activity
 }
 
 func New(options Options) *Engine {
@@ -119,6 +122,7 @@ func New(options Options) *Engine {
 		maxRuntimePaths:   options.MaxRuntimePaths,
 		applicationNames:  make(map[string]bool),
 		nodeVersion:       options.NodeVersion,
+		activity:          Activity{NodeIDs: []string{}, EdgeIDs: []string{}},
 	}
 	if name := strings.TrimSpace(options.ApplicationName); name != "" {
 		engine.applicationNames[name] = true
@@ -137,12 +141,16 @@ func (e *Engine) RegisterApplication(name, nodeVersion string) {
 	}
 }
 
-func (e *Engine) Ingest(spans []Span) {
+func (e *Engine) Ingest(spans []Span) LiveSnapshot {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	touched := make([]string, 0, len(spans))
 	touchedSet := make(map[string]bool, len(spans))
+	activeNodeIDs := make([]string, 0)
+	activeNodeSet := make(map[string]bool)
+	activeEdgeIDs := make([]string, 0)
+	activeEdgeSet := make(map[string]bool)
 	for _, span := range spans {
 		if !touchedSet[span.TraceID] {
 			touchedSet[span.TraceID] = true
@@ -169,6 +177,10 @@ func (e *Engine) Ingest(spans []Span) {
 		trace.lastUpdatedAt = e.clock
 		if node := e.resolveNode(span, true); node != nil {
 			e.record(&node.metrics, span.DurationMS, span.Status == "error")
+			if !activeNodeSet[node.id] {
+				activeNodeSet[node.id] = true
+				activeNodeIDs = append(activeNodeIDs, node.id)
+			}
 		}
 	}
 
@@ -199,6 +211,10 @@ func (e *Engine) Ingest(spans []Span) {
 			}
 			e.record(&edge.metrics, child.DurationMS, child.Status == "error")
 			e.seenEdgeSpanIDs[edgeSpanKey] = true
+			if !activeEdgeSet[edgeID] {
+				activeEdgeSet[edgeID] = true
+				activeEdgeIDs = append(activeEdgeIDs, edgeID)
+			}
 		}
 	}
 
@@ -208,6 +224,25 @@ func (e *Engine) Ingest(spans []Span) {
 		}
 	}
 	e.trimTraces()
+	e.revision++
+	e.activity = Activity{NodeIDs: activeNodeIDs, EdgeIDs: activeEdgeIDs}
+	return e.liveSnapshotLocked()
+}
+
+func (e *Engine) UpdateRuntime(metrics RuntimeMetrics) LiveSnapshot {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	copy := metrics
+	e.runtime = &copy
+	e.revision++
+	e.activity = Activity{NodeIDs: []string{}, EdgeIDs: []string{}}
+	return e.liveSnapshotLocked()
+}
+
+func (e *Engine) LiveSnapshot() LiveSnapshot {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.liveSnapshotLocked()
 }
 
 func (e *Engine) CreateSnapshot() Snapshot {
@@ -241,6 +276,21 @@ func (e *Engine) snapshotLocked() Snapshot {
 	}
 	sort.Slice(edges, func(i, j int) bool { return edges[i].ID < edges[j].ID })
 
+	snapshot := Snapshot{
+		Version: snapshotVersion, GeneratedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		Application: Application{Runtime: "nodejs", NodeVersion: e.nodeVersion},
+		Nodes:       nodes, Edges: edges, Paths: e.buildRuntimePaths(),
+	}
+	if len(services) > 0 {
+		snapshot.Application.Name = services[0]
+	}
+	if len(services) > 1 {
+		snapshot.Metadata = map[string]any{"serviceNames": services}
+	}
+	return snapshot
+}
+
+func (e *Engine) buildRuntimePaths() []Path {
 	paths := make([]Path, 0, len(e.paths))
 	for _, state := range e.paths {
 		paths = append(paths, Path{
@@ -255,19 +305,103 @@ func (e *Engine) snapshotLocked() Snapshot {
 		}
 		return paths[i].ID < paths[j].ID
 	})
+	return paths
+}
 
-	snapshot := Snapshot{
-		Version: snapshotVersion, GeneratedAt: time.Now().UTC().Format(time.RFC3339Nano),
-		Application: Application{Runtime: "nodejs", NodeVersion: e.nodeVersion},
-		Nodes:       nodes, Edges: edges, Paths: paths,
+func (e *Engine) buildRecentTraces() []RecentTrace {
+	states := make([]*traceState, 0, len(e.traces))
+	for _, trace := range e.traces {
+		containsTopology := false
+		for _, spanID := range trace.spanOrder {
+			if topologyKinds[trace.spans[spanID].Kind] {
+				containsTopology = true
+				break
+			}
+		}
+		if containsTopology {
+			states = append(states, trace)
+		}
 	}
-	if len(services) > 0 {
-		snapshot.Application.Name = services[0]
+	sort.Slice(states, func(i, j int) bool { return states[i].lastUpdatedAt > states[j].lastUpdatedAt })
+	recent := make([]RecentTrace, 0, len(states))
+	for _, state := range states {
+		built := e.buildTrace(state)
+		name := "Trace"
+		id := ""
+		if len(built.roots) > 0 {
+			name = built.roots[0].span.Name
+			id = built.roots[0].span.TraceID
+		}
+		recent = append(recent, RecentTrace{
+			ID: id, Name: name, StartedAt: built.startedAt, Duration: built.durationMS,
+			Status: map[bool]string{true: "error", false: "ok"}[built.failed],
+			Spans:  exportTraceSpans(built.roots),
+		})
 	}
-	if len(services) > 1 {
-		snapshot.Metadata = map[string]any{"serviceNames": services}
+	return recent
+}
+
+func summarize(metrics metricAccumulator) MetricSummary {
+	errorRate := 0.0
+	if metrics.count > 0 {
+		errorRate = round(float64(metrics.errors) / float64(metrics.count) * 100)
 	}
-	return snapshot
+	return MetricSummary{
+		RequestCount: metrics.count, ErrorCount: metrics.errors, ErrorRate: errorRate,
+		AvgLatencyMS: average(metrics), P50LatencyMS: percentile(metrics.latencies, .5),
+		P95LatencyMS: percentile(metrics.latencies, .95), P99LatencyMS: percentile(metrics.latencies, .99),
+	}
+}
+
+func exportTraceSpans(spans []*traceSpan) []TraceSpan {
+	exported := make([]TraceSpan, 0, len(spans))
+	for _, span := range spans {
+		copy := span.span
+		if span.span.Attributes != nil {
+			copy.Attributes = make(map[string]any, len(span.span.Attributes))
+			for key, value := range span.span.Attributes {
+				copy.Attributes[key] = value
+			}
+		}
+		exported = append(exported, TraceSpan{
+			Span: copy, NodeID: span.nodeID, Children: exportTraceSpans(span.children),
+		})
+	}
+	return exported
+}
+
+func (e *Engine) liveSnapshotLocked() LiveSnapshot {
+	nodes := make([]LiveNode, 0, len(e.nodes))
+	for _, state := range e.nodes {
+		nodes = append(nodes, LiveNode{
+			ID: state.id, Name: state.name, Type: state.kind, Framework: state.framework,
+			Operation: state.operation, MetricSummary: summarize(state.metrics),
+		})
+	}
+	sort.SliceStable(nodes, func(i, j int) bool { return nodes[i].Name < nodes[j].Name })
+
+	edges := make([]LiveEdge, 0, len(e.edges))
+	for _, state := range e.edges {
+		edges = append(edges, LiveEdge{
+			ID: state.id, Source: state.source, Target: state.target,
+			MetricSummary: summarize(state.metrics),
+		})
+	}
+	sort.Slice(edges, func(i, j int) bool { return edges[i].ID < edges[j].ID })
+
+	var runtimeMetrics *RuntimeMetrics
+	if e.runtime != nil {
+		copy := *e.runtime
+		runtimeMetrics = &copy
+	}
+	return LiveSnapshot{
+		Revision: e.revision, GeneratedAt: time.Now().UnixMilli(), Nodes: nodes, Edges: edges,
+		Paths: e.buildRuntimePaths(), Traces: e.buildRecentTraces(), Runtime: runtimeMetrics,
+		Activity: Activity{
+			NodeIDs: append([]string{}, e.activity.NodeIDs...),
+			EdgeIDs: append([]string{}, e.activity.EdgeIDs...),
+		},
+	}
 }
 
 func (e *Engine) resolveNode(span Span, create bool) *nodeState {
@@ -463,6 +597,7 @@ type traceSpan struct {
 
 type builtTrace struct {
 	roots      []*traceSpan
+	startedAt  float64
 	durationMS float64
 	failed     bool
 }
@@ -511,7 +646,7 @@ func (e *Engine) buildTrace(trace *traceState) builtTrace {
 		first = false
 		failed = failed || span.Status == "error"
 	}
-	return builtTrace{roots: roots, durationMS: round(latest - earliest), failed: failed}
+	return builtTrace{roots: roots, startedAt: earliest, durationMS: round(latest - earliest), failed: failed}
 }
 
 func findNearestTraceParent(span Span, allSpans map[string]Span, topologySpans map[string]*traceSpan) *traceSpan {

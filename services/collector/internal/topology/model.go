@@ -14,6 +14,74 @@ type Span struct {
 	Attributes      map[string]any `json:"attributes,omitempty"`
 }
 
+type RuntimeMetrics struct {
+	Timestamp            float64 `json:"timestamp"`
+	ServiceName          string  `json:"serviceName"`
+	RSSBytes             uint64  `json:"rssBytes"`
+	HeapUsedBytes        uint64  `json:"heapUsedBytes"`
+	HeapTotalBytes       uint64  `json:"heapTotalBytes"`
+	CPUPercent           float64 `json:"cpuPercent"`
+	EventLoopUtilization float64 `json:"eventLoopUtilization"`
+	UptimeSeconds        float64 `json:"uptimeSeconds"`
+}
+
+type MetricSummary struct {
+	RequestCount int     `json:"requestCount"`
+	ErrorCount   int     `json:"errorCount"`
+	ErrorRate    float64 `json:"errorRate"`
+	AvgLatencyMS float64 `json:"avgLatencyMs"`
+	P50LatencyMS float64 `json:"p50LatencyMs"`
+	P95LatencyMS float64 `json:"p95LatencyMs"`
+	P99LatencyMS float64 `json:"p99LatencyMs"`
+}
+
+type LiveNode struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Type      string `json:"type"`
+	Framework string `json:"framework,omitempty"`
+	Operation string `json:"operation,omitempty"`
+	MetricSummary
+}
+
+type LiveEdge struct {
+	ID     string `json:"id"`
+	Source string `json:"source"`
+	Target string `json:"target"`
+	MetricSummary
+}
+
+type TraceSpan struct {
+	Span
+	NodeID   string      `json:"nodeId,omitempty"`
+	Children []TraceSpan `json:"children"`
+}
+
+type RecentTrace struct {
+	ID        string      `json:"id"`
+	Name      string      `json:"name"`
+	StartedAt float64     `json:"startedAt"`
+	Duration  float64     `json:"durationMs"`
+	Status    string      `json:"status"`
+	Spans     []TraceSpan `json:"spans"`
+}
+
+type Activity struct {
+	NodeIDs []string `json:"nodeIds"`
+	EdgeIDs []string `json:"edgeIds"`
+}
+
+type LiveSnapshot struct {
+	Revision    uint64          `json:"revision"`
+	GeneratedAt int64           `json:"generatedAt"`
+	Nodes       []LiveNode      `json:"nodes"`
+	Edges       []LiveEdge      `json:"edges"`
+	Paths       []Path          `json:"paths"`
+	Traces      []RecentTrace   `json:"traces"`
+	Runtime     *RuntimeMetrics `json:"runtime,omitempty"`
+	Activity    Activity        `json:"activity"`
+}
+
 type NodeMetrics struct {
 	CallCount     int     `json:"callCount"`
 	ErrorCount    int     `json:"errorCount"`

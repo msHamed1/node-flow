@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import type { NodeFlowSnapshot } from '@mshamed1/node-flow-protocol';
+import type { NodeFlowSnapshot, TopologySnapshot } from '@mshamed1/node-flow-protocol';
 import { TopologyEngine } from '../src/index.js';
 import {
   canonicalizeTopology,
@@ -20,10 +20,15 @@ interface DifferentialFixture {
 }
 
 interface GoResponse {
-  fixtures: Array<{ name: string; snapshot: NodeFlowSnapshot }>;
+  fixtures: Array<{ name: string; snapshot: NodeFlowSnapshot; liveSnapshot: TopologySnapshot }>;
 }
 
-describe('Go TopologyEngine differential prototype', () => {
+interface EngineResults {
+  architecture: CanonicalTopology;
+  live: TopologySnapshot;
+}
+
+describe('Go TopologyEngine compatibility', () => {
   it('matches the TypeScript source of truth for native and deterministic randomized arrival orders', () => {
     const candidates = goldenFixtures().flatMap(differentialVariants);
     const goByName = runGoPrototype(candidates);
@@ -32,17 +37,20 @@ describe('Go TopologyEngine differential prototype', () => {
     for (const candidate of candidates) {
       const expected = normalizeCanonicalTopology(candidate.expected);
       const typescript = runTypeScriptEngine(candidate.batches);
-      const goSnapshot = goByName.get(candidate.name);
-      if (!goSnapshot) {
+      const goResult = goByName.get(candidate.name);
+      if (!goResult) {
         failures.push(`${candidate.name}: Go result is missing`);
         continue;
       }
-      const go = canonicalizeTopology(goSnapshot);
-      for (const difference of semanticDifferences(expected, typescript)) {
+      const go = canonicalizeTopology(goResult.snapshot);
+      for (const difference of semanticDifferences(expected, typescript.architecture)) {
         failures.push(`${candidate.name} [TypeScript vs golden]: ${difference}`);
       }
-      for (const difference of semanticDifferences(typescript, go)) {
+      for (const difference of semanticDifferences(typescript.architecture, go)) {
         failures.push(`${candidate.name} [TypeScript vs Go]: ${difference}`);
+      }
+      for (const difference of liveSemanticDifferences(typescript.live, goResult.liveSnapshot)) {
+        failures.push(`${candidate.name} [live TypeScript vs Go]: ${difference}`);
       }
     }
 
@@ -50,16 +58,21 @@ describe('Go TopologyEngine differential prototype', () => {
   }, 120_000);
 });
 
-function runTypeScriptEngine(batches: TelemetryBatch[]): CanonicalTopology {
+function runTypeScriptEngine(batches: TelemetryBatch[]): EngineResults {
   const engine = new TopologyEngine({ nodeVersion: 'v22.0.0' });
   for (const batch of batches) {
     engine.registerApplication(batch.serviceName, batch.nodeVersion ?? 'v22.0.0');
     engine.ingest(batch.spans);
   }
-  return canonicalizeTopology(engine.createSnapshot());
+  return {
+    architecture: canonicalizeTopology(engine.createSnapshot()),
+    live: engine.snapshot(),
+  };
 }
 
-function runGoPrototype(candidates: DifferentialFixture[]): Map<string, NodeFlowSnapshot> {
+function runGoPrototype(
+  candidates: DifferentialFixture[],
+): Map<string, GoResponse['fixtures'][number]> {
   const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
   const execution = spawnSync('go', ['run', './cmd/topology-diff'], {
     cwd: join(repositoryRoot, 'services/collector'),
@@ -77,7 +90,7 @@ function runGoPrototype(candidates: DifferentialFixture[]): Map<string, NodeFlow
     throw new Error(`Go differential runner failed (${execution.status}): ${execution.stderr}`);
   }
   const response = JSON.parse(execution.stdout) as GoResponse;
-  return new Map(response.fixtures.map((fixture) => [fixture.name, fixture.snapshot]));
+  return new Map(response.fixtures.map((fixture) => [fixture.name, fixture]));
 }
 
 function differentialVariants(fixture: GoldenFixture): DifferentialFixture[] {
@@ -146,6 +159,39 @@ function semanticDifferences(expected: CanonicalTopology, actual: CanonicalTopol
     (path) => `${path.entrypoint}:${path.nodes.join('>')}`,
   );
   return differences;
+}
+
+function liveSemanticDifferences(
+  expectedValue: TopologySnapshot,
+  actualValue: TopologySnapshot,
+): string[] {
+  const expected = jsonValue(expectedValue);
+  const actual = jsonValue(actualValue);
+  const differences: string[] = [];
+  compareValue(differences, 'revision', expected.revision, actual.revision);
+  compareCollection(differences, 'live node', expected.nodes, actual.nodes, (node) => node.id);
+  compareCollection(differences, 'live edge', expected.edges, actual.edges, (edge) => edge.id);
+  compareCollection(
+    differences,
+    'live path',
+    expected.paths ?? [],
+    actual.paths ?? [],
+    (path) => `${path.entrypoint}:${path.nodes.join('>')}`,
+  );
+  compareCollection(
+    differences,
+    'recent trace',
+    expected.traces,
+    actual.traces,
+    (trace) => trace.id,
+  );
+  compareValue(differences, 'runtime', expected.runtime, actual.runtime);
+  compareValue(differences, 'activity', expected.activity, actual.activity);
+  return differences;
+}
+
+function jsonValue<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 function compareCollection<T>(

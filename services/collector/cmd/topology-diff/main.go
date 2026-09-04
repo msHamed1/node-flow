@@ -28,8 +28,9 @@ type response struct {
 }
 
 type fixtureResult struct {
-	Name     string            `json:"name"`
-	Snapshot topology.Snapshot `json:"snapshot"`
+	Name         string                `json:"name"`
+	Snapshot     topology.Snapshot     `json:"snapshot"`
+	LiveSnapshot topology.LiveSnapshot `json:"liveSnapshot"`
 }
 
 func main() {
@@ -49,7 +50,9 @@ func main() {
 			engine.RegisterApplication(telemetryBatch.ServiceName, nodeVersion)
 			engine.Ingest(telemetryBatch.Spans)
 		}
-		output.Fixtures = append(output.Fixtures, fixtureResult{Name: candidate.Name, Snapshot: engine.CreateSnapshot()})
+		output.Fixtures = append(output.Fixtures, fixtureResult{
+			Name: candidate.Name, Snapshot: engine.CreateSnapshot(), LiveSnapshot: engine.LiveSnapshot(),
+		})
 	}
 	if err := json.NewEncoder(os.Stdout).Encode(output); err != nil {
 		fail("encode response: %v", err)

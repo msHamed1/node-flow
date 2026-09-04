@@ -91,6 +91,7 @@ func (sink *HTTP) ConsumeBatch(ctx context.Context, envelopes []telemetry.Envelo
 		if err := sink.postJSON(ctx, "/api/spans", group.batch, &acknowledgement); err != nil {
 			return nil, err
 		}
+		sink.metrics.RecordTopologyUpdate()
 		for _, index := range group.indexes {
 			revision := acknowledgement.Revision
 			outcomes[index].Revision = &revision
@@ -102,6 +103,7 @@ func (sink *HTTP) ConsumeBatch(ctx context.Context, envelopes []telemetry.Envelo
 		if err := sink.postJSON(ctx, "/api/runtime", runtimes[serviceName], nil); err != nil {
 			return nil, err
 		}
+		sink.metrics.RecordTopologyUpdate()
 	}
 
 	if len(spanKeys) > 0 {
