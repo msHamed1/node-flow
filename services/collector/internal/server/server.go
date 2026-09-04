@@ -106,6 +106,9 @@ func (api *API) accept(response http.ResponseWriter, request *http.Request, enve
 		case errors.Is(err, pipeline.ErrQueueFull):
 			response.Header().Set("Retry-After", "1")
 			writeError(response, http.StatusTooManyRequests, err.Error())
+		case errors.Is(err, pipeline.ErrSpoolFull):
+			response.Header().Set("Retry-After", "5")
+			writeError(response, http.StatusInsufficientStorage, err.Error())
 		case errors.Is(err, pipeline.ErrClosed):
 			writeError(response, http.StatusServiceUnavailable, err.Error())
 		case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):

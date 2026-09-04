@@ -14,6 +14,7 @@ import (
 	"github.com/msHamed1/node-flow/services/collector/internal/pipeline"
 	collectorserver "github.com/msHamed1/node-flow/services/collector/internal/server"
 	"github.com/msHamed1/node-flow/services/collector/internal/sink"
+	"github.com/msHamed1/node-flow/services/collector/internal/spool"
 )
 
 var version = "dev"
@@ -25,6 +26,20 @@ func main() {
 	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel(config.LogLevel)}))
 	metrics := collectormetrics.New()
+	var durableSpool *spool.Store
+	if config.SpoolMode == "durable" {
+		var recovery spool.Recovery
+		durableSpool, recovery, err = spool.Open(spool.Config{
+			Directory: config.SpoolDirectory, MaxBytes: config.SpoolMaxBytes,
+		}, metrics)
+		if err != nil {
+			fatal("open durable collector spool", err)
+		}
+		metrics.RecordSpoolReplay(uint64(recovery.Records))
+		logger.Info("durable collector spool ready", "directory", config.SpoolDirectory,
+			"max_bytes", config.SpoolMaxBytes, "recovered_records", recovery.Records,
+			"recovered_bytes", recovery.Bytes, "corruptions", recovery.Corruptions)
+	}
 
 	var telemetrySink pipeline.Sink
 	if config.Sink == "discard" {
@@ -39,7 +54,11 @@ func main() {
 
 	processor, err := pipeline.New(pipeline.Config{
 		Workers: config.Workers, QueueSize: config.QueueSize, BatchSize: config.BatchSize,
-		FlushInterval: config.FlushInterval,
+		FlushInterval: config.FlushInterval, Spool: durableSpool,
+		Retry: pipeline.RetryConfig{
+			InitialBackoff: config.RetryInitial, MaxBackoff: config.RetryMax,
+			MaxAttempts: config.RetryAttempts, Jitter: config.RetryJitter,
+		},
 	}, telemetrySink, metrics, logger)
 	if err != nil {
 		fatal("configure collector pipeline", err)
@@ -51,7 +70,8 @@ func main() {
 	go func() {
 		logger.Info("NodeFlow Go collector started",
 			"address", config.ListenAddress, "workers", config.Workers, "queue_size", config.QueueSize,
-			"batch_size", config.BatchSize, "flush_interval", config.FlushInterval.String(), "sink", config.Sink)
+			"batch_size", config.BatchSize, "flush_interval", config.FlushInterval.String(),
+			"sink", config.Sink, "spool_mode", config.SpoolMode)
 		serverErrors <- server.ListenAndServe()
 	}()
 

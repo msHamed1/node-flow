@@ -15,6 +15,7 @@ import (
 	nodeflowv1 "github.com/msHamed1/node-flow/services/collector/gen/nodeflow/v1"
 	collectormetrics "github.com/msHamed1/node-flow/services/collector/internal/metrics"
 	"github.com/msHamed1/node-flow/services/collector/internal/pipeline"
+	"github.com/msHamed1/node-flow/services/collector/internal/spool"
 	"github.com/msHamed1/node-flow/services/collector/internal/telemetry"
 	"google.golang.org/protobuf/proto"
 )
@@ -142,6 +143,38 @@ func TestAcceptanceDoesNotWaitForBlockedSink(t *testing.T) {
 		t.Fatal("HTTP acknowledgement waited for the blocked sink")
 	}
 	close(sink.release)
+	stopPipeline(t, processor)
+}
+
+func TestDurableSpoolExhaustionReturnsInsufficientStorage(t *testing.T) {
+	t.Parallel()
+	metrics := collectormetrics.New()
+	store, _, err := spool.Open(
+		spool.Config{Directory: t.TempDir(), MaxBytes: 1}, metrics,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	processor, err := pipeline.New(pipeline.Config{
+		Workers: 1, QueueSize: 2, BatchSize: 1, FlushInterval: time.Millisecond, Spool: store,
+		Retry: pipeline.RetryConfig{
+			InitialBackoff: time.Millisecond, MaxBackoff: time.Millisecond, MaxAttempts: 2,
+		},
+	}, &acknowledgementSink{}, metrics, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	api := New(processor, metrics, slog.New(slog.NewTextHandler(io.Discard, nil)), 2*1_024*1_024, "test")
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/spans", bytes.NewBufferString(`{
+		"serviceName":"payments-api",
+		"spans":[{"traceId":"trace-1","spanId":"span-1","name":"work","kind":"service","startTimeUnixMs":1,"durationMs":1,"status":"ok"}]
+	}`))
+	request.Header.Set("Content-Type", "application/json")
+	api.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusInsufficientStorage || response.Header().Get("Retry-After") != "5" {
+		t.Fatalf("expected durable capacity rejection, got %d headers=%v", response.Code, response.Header())
+	}
 	stopPipeline(t, processor)
 }
 
