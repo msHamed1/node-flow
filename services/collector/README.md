@@ -1,5 +1,9 @@
 # NodeFlow Go collector
 
+> The Go topology package under `internal/topology` is an isolated V2.3 differential prototype.
+> The collector does not import or serve it; production topology remains owned by the TypeScript
+> `TopologyEngine`.
+
 The V2 collector is NodeFlow's runtime-neutral ingestion boundary. It accepts versioned Protobuf or
 legacy JSON telemetry, validates and sanitizes it, durably admits it to a bounded disk spool,
 batches work through service-sharded workers, and forwards it to a topology sink.

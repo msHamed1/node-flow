@@ -2,7 +2,6 @@ package topology
 
 import (
 	"fmt"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -106,7 +105,7 @@ func New(options Options) *Engine {
 		options.MaxRuntimePaths = 1000
 	}
 	if options.NodeVersion == "" {
-		options.NodeVersion = runtime.Version()
+		options.NodeVersion = "unknown"
 	}
 	engine := &Engine{
 		nodes:             make(map[string]*nodeState),

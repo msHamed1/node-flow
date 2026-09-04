@@ -2,8 +2,8 @@
 
 The TypeScript `TopologyEngine` is NodeFlow's semantic source of truth during the V2 collector
 migration. The golden corpus under `packages/topology-engine/test` converts deterministic telemetry
-batches into `nodeflow.topology-golden.v1`, a compact JSON-serializable representation intended for
-future TypeScript-versus-Go differential tests. The fixture source uses TypeScript only for schema
+batches into `nodeflow.topology-golden.v1`, a compact JSON-serializable representation used by the
+TypeScript-versus-Go differential tests. The fixture source uses TypeScript only for schema
 checking; inputs and expected values contain no functions, dates, maps, or TypeScript-only values.
 
 ## Compatibility contract
@@ -39,13 +39,21 @@ volatile fields must not be added merely to mirror the full snapshot object.
 
 ## Coverage
 
-The corpus covers HTTP/controller/service chains, nested services, MongoDB/Mongoose normalization,
-PostgreSQL, Redis, RabbitMQ, external HTTP, transparent local-event detail, background workers,
-errors, parallel and repeated operations, duplicate replay, missing parents, late/out-of-order
-parents, mixed dependency types, and multi-service traces.
+The 14 fixtures cover HTTP/controller/service chains, nested services, MongoDB/Mongoose
+normalization, PostgreSQL, Redis, RabbitMQ, external HTTP, transparent local-event detail,
+transparent internal spans, background workers, errors, parallel and repeated operations,
+recursive same-service calls, duplicate replay, missing parents, late/out-of-order parents, mixed
+dependency types, and multi-service traces.
+
+The Go differential runner executes each fixture in its native batching and in two deterministic
+seeded span-level permutations. It runs the TypeScript source-of-truth implementation and the
+isolated Go prototype from the same input, canonicalizes both snapshots, and reports missing or
+unexpected nodes and edges plus identity-specific node, edge, and path mismatches. This gives 42
+cross-language comparisons without expanding the checked-in corpus into unstable snapshots.
 
 Run it with:
 
 ```bash
 yarn vitest run packages/topology-engine/test/golden-corpus.test.ts
+yarn test:topology-diff
 ```
