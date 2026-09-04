@@ -16,9 +16,12 @@ import (
 	collectorserver "github.com/msHamed1/node-flow/services/collector/internal/server"
 	"github.com/msHamed1/node-flow/services/collector/internal/sink"
 	"github.com/msHamed1/node-flow/services/collector/internal/spool"
+	"github.com/msHamed1/node-flow/services/collector/internal/topology"
 )
 
 var version = "dev"
+
+const publicAPIVersion = "0.1.0"
 
 func main() {
 	config, err := config.Load()
@@ -67,14 +70,34 @@ func main() {
 	}
 
 	var telemetrySink pipeline.Sink
+	var topologyEngine *topology.Engine
+	var topologyState *topology.StateStore
+	var snapshotHub *collectorserver.SnapshotHub
+	var topologyProxy http.Handler
 	if config.Sink == "discard" {
 		logger.Warn("discard sink enabled; telemetry will not reach the topology engine")
 		telemetrySink = sink.Discard{}
-	} else {
+	} else if config.TopologyEngine == "typescript" || config.Sink == "http" {
 		telemetrySink, err = sink.NewHTTP(config.TopologyURL, config.SinkTimeout, metrics, logger)
 		if err != nil {
 			fatal("configure topology sink", err)
 		}
+		logger.Warn("TypeScript topology rollback mode enabled", "url", config.TopologyURL)
+		topologyProxy, err = collectorserver.NewTopologyProxy(config.TopologyURL)
+		if err != nil {
+			fatal("configure topology proxy", err)
+		}
+	} else {
+		topologyEngine, topologyState, err = topology.OpenStateStore(config.TopologyStatePath, topology.Options{})
+		if err != nil {
+			fatal("restore Go topology state", err)
+		}
+		snapshotHub = collectorserver.NewSnapshotHub(topologyEngine, publicAPIVersion)
+		telemetrySink = sink.NewTopology(topologyEngine, metrics, snapshotHub, topologyState)
+		restored := topologyEngine.LiveSnapshot()
+		metrics.SetTopology(len(restored.Nodes), len(restored.Edges))
+		logger.Info("Go topology state ready", "path", config.TopologyStatePath,
+			"revision", restored.Revision, "nodes", len(restored.Nodes), "edges", len(restored.Edges))
 	}
 
 	processor, err := pipeline.New(pipeline.Config{
@@ -88,7 +111,16 @@ func main() {
 	if err != nil {
 		fatal("configure collector pipeline", err)
 	}
-	api := collectorserver.New(processor, metrics, logger, config.MaxBodyBytes, version)
+	serverOptions := make([]collectorserver.Option, 0, 2)
+	if topologyEngine != nil {
+		serverOptions = append(serverOptions, collectorserver.WithTopology(topologyEngine, snapshotHub))
+	} else if topologyProxy != nil {
+		serverOptions = append(serverOptions, collectorserver.WithTopologyProxy(topologyProxy))
+	}
+	if config.DashboardDir != "" {
+		serverOptions = append(serverOptions, collectorserver.WithDashboard(config.DashboardDir))
+	}
+	api := collectorserver.New(processor, metrics, logger, config.MaxBodyBytes, publicAPIVersion, serverOptions...)
 	server := api.HTTPServer(config.ListenAddress)
 
 	serverErrors := make(chan error, 1)
@@ -96,7 +128,8 @@ func main() {
 		logger.Info("NodeFlow Go collector started",
 			"address", config.ListenAddress, "workers", config.Workers, "queue_size", config.QueueSize,
 			"batch_size", config.BatchSize, "flush_interval", config.FlushInterval.String(),
-			"sink", config.Sink, "spool_mode", config.SpoolMode)
+			"sink", config.Sink, "topology_engine", config.TopologyEngine, "spool_mode", config.SpoolMode,
+			"binary_version", version)
 		serverErrors <- server.ListenAndServe()
 	}()
 
@@ -118,6 +151,9 @@ func main() {
 	defer cancel()
 	if err := server.Shutdown(shutdownContext); err != nil {
 		logger.Error("collector HTTP shutdown failed", "error", err)
+	}
+	if snapshotHub != nil {
+		snapshotHub.Close()
 	}
 	if err := processor.Wait(shutdownContext); err != nil {
 		logger.Error("collector drain failed", "error", err)

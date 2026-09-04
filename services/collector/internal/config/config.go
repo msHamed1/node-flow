@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -10,28 +11,31 @@ import (
 )
 
 type Config struct {
-	ListenAddress    string
-	TopologyURL      string
-	Sink             string
-	Workers          int
-	QueueSize        int
-	BatchSize        int
-	FlushInterval    time.Duration
-	MaxBodyBytes     int64
-	SinkTimeout      time.Duration
-	ShutdownTimeout  time.Duration
-	LogLevel         string
-	SpoolMode        string
-	SpoolDirectory   string
-	SpoolMaxBytes    int64
-	WALSegmentBytes  int64
-	WALBatchRecords  int
-	WALFlushInterval time.Duration
-	WALAppendQueue   int
-	RetryInitial     time.Duration
-	RetryMax         time.Duration
-	RetryAttempts    int
-	RetryJitter      float64
+	ListenAddress     string
+	TopologyURL       string
+	TopologyEngine    string
+	TopologyStatePath string
+	DashboardDir      string
+	Sink              string
+	Workers           int
+	QueueSize         int
+	BatchSize         int
+	FlushInterval     time.Duration
+	MaxBodyBytes      int64
+	SinkTimeout       time.Duration
+	ShutdownTimeout   time.Duration
+	LogLevel          string
+	SpoolMode         string
+	SpoolDirectory    string
+	SpoolMaxBytes     int64
+	WALSegmentBytes   int64
+	WALBatchRecords   int
+	WALFlushInterval  time.Duration
+	WALAppendQueue    int
+	RetryInitial      time.Duration
+	RetryMax          time.Duration
+	RetryAttempts     int
+	RetryJitter       float64
 }
 
 func Load() (Config, error) {
@@ -39,29 +43,33 @@ func Load() (Config, error) {
 	if workers > 32 {
 		workers = 32
 	}
+	spoolDirectory := env("NODEFLOW_SPOOL_DIR", ".nodeflow/spool")
 	config := Config{
-		ListenAddress:    env("NODEFLOW_GO_LISTEN_ADDR", ":4318"),
-		TopologyURL:      env("NODEFLOW_TOPOLOGY_URL", "http://127.0.0.1:7331"),
-		Sink:             strings.ToLower(env("NODEFLOW_SINK", "http")),
-		Workers:          workers,
-		QueueSize:        10_000,
-		BatchSize:        250,
-		FlushInterval:    500 * time.Millisecond,
-		MaxBodyBytes:     2 * 1_024 * 1_024,
-		SinkTimeout:      5 * time.Second,
-		ShutdownTimeout:  15 * time.Second,
-		LogLevel:         strings.ToLower(env("NODEFLOW_LOG_LEVEL", "info")),
-		SpoolMode:        strings.ToLower(env("NODEFLOW_SPOOL_MODE", "group-commit")),
-		SpoolDirectory:   env("NODEFLOW_SPOOL_DIR", ".nodeflow/spool"),
-		SpoolMaxBytes:    512 * 1_024 * 1_024,
-		WALSegmentBytes:  16 * 1_024 * 1_024,
-		WALBatchRecords:  64,
-		WALFlushInterval: 2 * time.Millisecond,
-		WALAppendQueue:   2_048,
-		RetryInitial:     100 * time.Millisecond,
-		RetryMax:         30 * time.Second,
-		RetryAttempts:    10,
-		RetryJitter:      0.2,
+		ListenAddress:     env("NODEFLOW_GO_LISTEN_ADDR", ":7331"),
+		TopologyURL:       env("NODEFLOW_TOPOLOGY_URL", "http://127.0.0.1:7331"),
+		TopologyEngine:    strings.ToLower(env("NODEFLOW_TOPOLOGY_ENGINE", "go")),
+		TopologyStatePath: env("NODEFLOW_TOPOLOGY_STATE_PATH", filepath.Join(spoolDirectory, "topology-state.json")),
+		DashboardDir:      env("NODEFLOW_DASHBOARD_DIR", ""),
+		Sink:              strings.ToLower(env("NODEFLOW_SINK", "topology")),
+		Workers:           workers,
+		QueueSize:         10_000,
+		BatchSize:         250,
+		FlushInterval:     500 * time.Millisecond,
+		MaxBodyBytes:      2 * 1_024 * 1_024,
+		SinkTimeout:       5 * time.Second,
+		ShutdownTimeout:   15 * time.Second,
+		LogLevel:          strings.ToLower(env("NODEFLOW_LOG_LEVEL", "info")),
+		SpoolMode:         strings.ToLower(env("NODEFLOW_SPOOL_MODE", "group-commit")),
+		SpoolDirectory:    spoolDirectory,
+		SpoolMaxBytes:     512 * 1_024 * 1_024,
+		WALSegmentBytes:   16 * 1_024 * 1_024,
+		WALBatchRecords:   64,
+		WALFlushInterval:  2 * time.Millisecond,
+		WALAppendQueue:    2_048,
+		RetryInitial:      100 * time.Millisecond,
+		RetryMax:          30 * time.Second,
+		RetryAttempts:     10,
+		RetryJitter:       0.2,
 	}
 	var err error
 	if config.Workers, err = integer("NODEFLOW_WORKERS", config.Workers); err != nil {
@@ -115,8 +123,11 @@ func Load() (Config, error) {
 	if config.Workers < 1 || config.QueueSize < 1 || config.BatchSize < 1 || config.BatchSize > config.QueueSize || config.MaxBodyBytes < 1 {
 		return Config{}, fmt.Errorf("collector limits must be positive and batch size cannot exceed queue size")
 	}
-	if config.Sink != "http" && config.Sink != "discard" {
-		return Config{}, fmt.Errorf("NODEFLOW_SINK must be http or discard")
+	if config.TopologyEngine != "go" && config.TopologyEngine != "typescript" {
+		return Config{}, fmt.Errorf("NODEFLOW_TOPOLOGY_ENGINE must be go or typescript")
+	}
+	if config.Sink != "topology" && config.Sink != "http" && config.Sink != "discard" {
+		return Config{}, fmt.Errorf("NODEFLOW_SINK must be topology, http, or discard")
 	}
 	if config.LogLevel != "debug" && config.LogLevel != "info" && config.LogLevel != "warn" && config.LogLevel != "error" {
 		return Config{}, fmt.Errorf("NODEFLOW_LOG_LEVEL must be debug, info, warn, or error")

@@ -8,6 +8,10 @@ import (
 func TestLoadOverridesCollectorLimits(t *testing.T) {
 	t.Setenv("NODEFLOW_GO_LISTEN_ADDR", "127.0.0.1:9000")
 	t.Setenv("NODEFLOW_TOPOLOGY_URL", "http://topology:7331")
+	t.Setenv("NODEFLOW_TOPOLOGY_ENGINE", "typescript")
+	t.Setenv("NODEFLOW_TOPOLOGY_STATE_PATH", "/tmp/nodeflow-topology-state.json")
+	t.Setenv("NODEFLOW_DASHBOARD_DIR", "/tmp/nodeflow-dashboard")
+	t.Setenv("NODEFLOW_SINK", "http")
 	t.Setenv("NODEFLOW_WORKERS", "8")
 	t.Setenv("NODEFLOW_QUEUE_SIZE", "1000")
 	t.Setenv("NODEFLOW_BATCH_SIZE", "100")
@@ -32,6 +36,10 @@ func TestLoadOverridesCollectorLimits(t *testing.T) {
 	if config.ListenAddress != "127.0.0.1:9000" || config.TopologyURL != "http://topology:7331" {
 		t.Fatalf("endpoint overrides were not loaded: %#v", config)
 	}
+	if config.TopologyEngine != "typescript" || config.TopologyStatePath != "/tmp/nodeflow-topology-state.json" ||
+		config.DashboardDir != "/tmp/nodeflow-dashboard" || config.Sink != "http" {
+		t.Fatalf("topology overrides were not loaded: %#v", config)
+	}
 	if config.Workers != 8 || config.QueueSize != 1000 || config.BatchSize != 100 {
 		t.Fatalf("limit overrides were not loaded: %#v", config)
 	}
@@ -45,6 +53,23 @@ func TestLoadOverridesCollectorLimits(t *testing.T) {
 		config.RetryInitial != 10*time.Millisecond || config.RetryMax != 2*time.Second ||
 		config.RetryAttempts != 7 || config.RetryJitter != 0.1 {
 		t.Fatalf("durable overrides were not loaded: %#v", config)
+	}
+}
+
+func TestLoadDefaultsToGoTopology(t *testing.T) {
+	config, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.TopologyEngine != "go" || config.Sink != "topology" || config.ListenAddress != ":7331" {
+		t.Fatalf("unexpected production defaults: %#v", config)
+	}
+}
+
+func TestLoadRejectsInvalidTopologyEngine(t *testing.T) {
+	t.Setenv("NODEFLOW_TOPOLOGY_ENGINE", "shadow")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected invalid topology engine to fail")
 	}
 }
 
