@@ -21,8 +21,9 @@ Path IDs are deliberately excluded: the path entrypoint and ordered node chain a
 identity, while the current hash is an implementation detail.
 
 The corpus ignores snapshot generation time, revision, activity highlights, raw recent traces,
-process runtime samples, and the reporting process's Node.js version. Those fields are volatile or
-belong to live presentation rather than architecture equivalence.
+process runtime samples, the reporting process's Node.js version, and derived error-rate percentages
+(calls and errors are authoritative). Those fields are volatile, redundant, or belong to live
+presentation rather than architecture equivalence.
 
 ## Normalization
 
