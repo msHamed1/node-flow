@@ -26,7 +26,7 @@ The collector calls the topology engine synchronously in the HTTP handler. The t
 already a separate package, but transport and projection share one process and there is no explicit
 ingress capacity boundary.
 
-## First V2 increment
+## Current V2 increment
 
 ```text
 Node.js application
@@ -36,8 +36,9 @@ TypeScript NodeFlow instrumentation
 Go collector
     ├─ decode and validation
     ├─ defense-in-depth redaction
-    ├─ bounded admission and backpressure
-    ├─ batching and fixed workers
+    ├─ durable bounded admission and backpressure
+    ├─ restart replay, retry, and quarantine
+    ├─ batching and service-sharded workers
     ├─ lifecycle and metrics
     └─ TelemetrySink interface
            ↓ compatibility HTTP bridge
@@ -54,17 +55,17 @@ single-process path or opt into the V2 infrastructure path.
 
 ## Ownership
 
-| Concern                                                   | Owner                                      |
-| --------------------------------------------------------- | ------------------------------------------ |
-| Node.js and OpenTelemetry integration                     | TypeScript instrumentation                 |
-| NestJS controllers and singleton providers                | TypeScript NestJS package                  |
-| Span normalization and first redaction boundary           | TypeScript instrumentation                 |
-| Versioned wire format                                     | `proto/nodeflow/v1` plus protocol bindings |
-| Network admission, limits, queues, batching, workers      | Go collector                               |
-| Second validation/redaction boundary                      | Go collector                               |
-| Stable node IDs, dependency reconstruction, runtime paths | TypeScript topology engine                 |
-| `TopologyEngine.createSnapshot()` and comparison          | TypeScript topology engine                 |
-| WebSocket and dashboard                                   | TypeScript collector/dashboard             |
+| Concern                                                    | Owner                                      |
+| ---------------------------------------------------------- | ------------------------------------------ |
+| Node.js and OpenTelemetry integration                      | TypeScript instrumentation                 |
+| NestJS controllers and singleton providers                 | TypeScript NestJS package                  |
+| Span normalization and first redaction boundary            | TypeScript instrumentation                 |
+| Versioned wire format                                      | `proto/nodeflow/v1` plus protocol bindings |
+| Network admission, durable spool, retry, batching, workers | Go collector                               |
+| Second validation/redaction boundary                       | Go collector                               |
+| Stable node IDs, dependency reconstruction, runtime paths  | TypeScript topology engine                 |
+| `TopologyEngine.createSnapshot()` and comparison           | TypeScript topology engine                 |
+| WebSocket and dashboard                                    | TypeScript collector/dashboard             |
 
 ## Protocol compatibility
 
@@ -78,13 +79,22 @@ Changing transport does not change stored snapshot semantics.
 
 ## Capacity and delivery semantics
 
-Admission counts envelopes and is bounded by `NODEFLOW_QUEUE_SIZE`; body, span, attribute, and string
-limits bound the size of each entry. The default rejection policy uses 429 rather than moving the
-backlog into open sockets. A 202 acknowledges admission to bounded memory rather than downstream
-topology commit, keeping the Node OpenTelemetry batch processor independent of the sink's flush
-latency. Processing failures are observable in metrics and logs, but the current service has no
-durable spool or automatic sink retry. A hard termination or downstream failure can therefore lose
-work that was already admitted.
+In the default durable mode, `202 Accepted` acknowledges a sanitized record only after its contents
+and directory entry are synced to the bounded local spool. It does not acknowledge a topology
+commit. The dispatch queue remains bounded by `NODEFLOW_QUEUE_SIZE`, while durable capacity is
+bounded independently by `NODEFLOW_SPOOL_MAX_BYTES`. Exhaustion returns HTTP 507 rather than moving
+the backlog into sockets or claiming acceptance.
+
+Workers are selected by service name, so envelopes for one application service retain admission
+order while unrelated services can progress independently. Transient failures use checkpointed
+exponential backoff with jitter. HTTP 4xx failures other than 408, 425, and 429 are permanent;
+permanent or retry-exhausted records are quarantined. Startup verifies record framing and CRC32,
+quarantines corruption, and replays valid unacknowledged records.
+
+Delivery is at least once. A crash after the sink commits but before the collector syncs removal can
+replay the record. The TypeScript engine ignores a repeated span ID while that trace remains in its
+bounded history, but this protection is not durable across topology-process restarts or trace
+eviction. Exactly-once delivery is not claimed.
 
 ## Security boundary
 
@@ -94,16 +104,20 @@ repeats the sanitization for legacy or third-party clients. Payload sizes and sc
 types are validated before admission.
 
 This remains a trusted local-development system. Bind to loopback or an isolated container network.
-Authentication, TLS, multi-tenant isolation, durable storage, and remote collection are outside the
-current V2 increment.
+Authentication, TLS, multi-tenant isolation, spool encryption, and remote collection are outside
+the current V2 increment. Spool directories are created with owner-only permissions, and records
+contain only telemetry after the collector's validation and redaction boundary.
 
 ## Deliberately deferred
 
 - A standalone Go topology implementation.
 - gRPC/OTLP receiver adapters.
 - Cross-platform distribution of the Go binary through the npm CLI.
-- Durable buffering or disk spill.
 - Remote/multi-tenant collection and authentication.
+- A compacting segmented WAL; the current per-envelope record format favors simple recovery over
+  high synchronous-write throughput.
 
-The next migration decision should be based on a cross-language semantic parity corpus, not on the
-desire to remove the temporary compatibility bridge.
+The checked-in `nodeflow.topology-golden.v1` corpus now defines the TypeScript behavior that a future
+Go projection must match. It is a prerequisite, not approval to migrate: the corpus should first be
+run against an independent Go implementation and the durable admission throughput limitation should
+be resolved or explicitly accepted.

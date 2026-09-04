@@ -1,6 +1,6 @@
 # NodeFlow V2 collector migration design
 
-Status: accepted for the first V2 migration increment
+Status: durable collector milestone implemented; topology migration remains deferred
 
 ## Current collector responsibilities
 
@@ -26,9 +26,10 @@ The first Go service owns the runtime-agnostic collector infrastructure:
 
 - versioned Protobuf and legacy JSON ingestion;
 - transport validation and a second redaction boundary;
-- a bounded admission queue with rejection when full;
+- a bounded, restart-safe local spool with rejection when its disk budget is full;
 - timed batching and a fixed-size worker pool;
-- admission acknowledgement, cancellation, and graceful draining;
+- per-service ordering, checkpointed retry, startup replay, corruption quarantine, and graceful
+  draining;
 - structured lifecycle logs and Prometheus-compatible internal metrics;
 - health, readiness, and load-generator surfaces.
 
@@ -78,26 +79,31 @@ JSON remains the default while the Go service is optional.
 
 ### Go collector to TypeScript topology process
 
-The initial `TelemetrySink` forwards compatible JSON to the existing endpoints. A successful
-client response acknowledges bounded in-memory admission, not downstream topology commit. Waiting
-for the sink here serializes the Node OpenTelemetry batch processor behind the bridge's flush
-interval and can overflow its own queue during bursts. Downstream failures after admission are
-therefore reported through collector metrics and structured logs. There is no durable spool or
-automatic downstream retry in this increment.
+The initial `TelemetrySink` forwards compatible JSON to the existing endpoints. In default durable
+mode, a successful client response acknowledges a synced spool record, not downstream topology
+commit. The bridge retries transient failures with exponential backoff and jitter, then removes a
+record only after a successful sink response and a synced removal checkpoint. Startup replays valid
+unacknowledged records. Permanent HTTP failures and records that exhaust the configured attempt
+budget are quarantined for inspection.
+
+This is at-least-once delivery. The crash window between sink success and the removal checkpoint can
+replay an already delivered record. The TypeScript topology engine currently deduplicates span IDs
+only while the containing trace remains in its bounded in-memory history. It is not a durable
+idempotency ledger.
 
 The Go service intentionally does not inspect `TopologyEngine` maps or reproduce its algorithms.
 `TopologyEngine.createSnapshot()` remains the stable derived-architecture boundary.
 
 ## Backpressure policy
 
-The default policy is immediate rejection. When the queue is full the collector returns HTTP 429
-with `Retry-After: 1`; during shutdown it returns HTTP 503. Blocking request handlers would move an
-unbounded backlog into sockets and instrumentation exporters, while rejecting reports work that
-never entered NodeFlow. Explicit rejection is bounded, observable, and lets the existing
-OpenTelemetry exporter report failure.
+The durable spool caps filesystem-allocated bytes across both active and quarantined files. When the
+cap is exhausted the collector returns HTTP 507 with `Retry-After: 5`; during shutdown it returns
+HTTP 503. Blocking request handlers would move an unbounded backlog into sockets and instrumentation
+exporters, while explicit rejection reports work that never entered NodeFlow.
 
-Queue capacity counts admitted envelopes. Request bodies and per-envelope span/attribute counts are
-also bounded, so a queue limit represents a real memory boundary rather than only a request count.
+The in-memory queue controls only the dispatch working set and refills from disk. Request bodies and
+per-envelope span/attribute counts remain bounded. The optional `memory` spool mode retains the
+original queue-full HTTP 429 behavior for controlled comparisons; it is not the safe default.
 
 ## Compatibility risks and controls
 
@@ -106,9 +112,10 @@ also bounded, so a queue limit represents a real memory boundary rather than onl
 | Protobuf readers and writers drift               | Versioned package and envelope, checked-in generated clients, generation check in CI                                              |
 | Existing clients only speak JSON                 | Preserve both legacy ingestion paths; keep revision-aware clients on the TypeScript endpoint because Go returns admission only    |
 | Topology changes during infrastructure migration | Keep the existing TypeScript engine and assert Go-to-TypeScript parity in integration tests                                       |
-| Out-of-order worker completion                   | The existing engine already correlates children arriving before parents; runtime forwarding keeps the newest sample in each batch |
+| Out-of-order worker completion                   | Service-name sharding preserves per-service admission order; the engine still reconciles children arriving before parents         |
 | Sensitive attributes cross the new boundary      | Redact before TypeScript export and again after Go decoding; test headers, cookies, tokens, URLs, bodies, and database statements |
-| Queue saturation hides data loss                 | Reject with 429 and expose received, processed, rejected, queue, error, and latency metrics                                       |
+| Disk saturation hides data loss                  | Reject with 507 and expose spool bytes, active/quarantined records, rejections, retries, replay, and permanent failures           |
+| Replay duplicates topology metrics               | At-least-once is explicit; golden tests cover retained-trace span deduplication, while durable idempotency remains a known gap    |
 | CLI/npm portability regresses                    | Do not embed a platform-specific Go executable in the npm package in this increment                                               |
 
 ## Migration sequence
@@ -119,6 +126,7 @@ also bounded, so a queue limit represents a real memory boundary rather than onl
 3. Add opt-in Protobuf export to Node instrumentation while retaining JSON defaults.
 4. Run the Go service in Docker Compose in front of the unchanged TypeScript topology/dashboard
    service and assert the complete existing integration topology.
-5. Collect parity and load evidence. Keep both collector choices supported throughout V2 adoption.
-6. Only after semantic parity is explicit, decide whether to implement a Go topology sink or keep
+5. Define a compact canonical topology corpus and add a bounded durable spool with restart replay.
+6. Collect parity and memory-versus-durable load evidence. Keep both collector choices supported.
+7. Only after an independent Go engine passes the corpus, decide whether to implement a Go topology sink or keep
    topology reconstruction in TypeScript as a separately versioned service.

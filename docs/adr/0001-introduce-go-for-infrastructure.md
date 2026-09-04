@@ -1,6 +1,6 @@
 # ADR 0001: Introduce Go for NodeFlow infrastructure components
 
-- Status: Accepted
+- Status: Accepted; delivery details amended by ADR 0002
 - Date: 2026-09-03
 
 ## Context
@@ -79,9 +79,10 @@ that contract explicit; a future OTLP adapter can implement the same sink.
 
 ## Operational consequences
 
-- The Go service is unhealthy if its process is failing and unready if the configured topology sink
-  cannot be reached.
-- Queue exhaustion returns 429; shutdown returns 503. Both are observable in metrics.
+- In default durable mode, readiness reflects admission capacity rather than topology-sink reachability.
+  Memory mode retains direct sink readiness. See ADR 0002.
+- Durable spool exhaustion returns 507; memory-queue exhaustion returns 429; shutdown returns 503.
+  All are observable in metrics.
 - SIGINT/SIGTERM stop HTTP admission, drain queued work up to the configured deadline, close the
   sink, and then exit.
 - The container binds to all interfaces for Docker, so deployments must publish it only to trusted

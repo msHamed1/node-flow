@@ -580,12 +580,23 @@ Run the automated real-infrastructure assertions:
 
 ```bash
 yarn integration:test
+yarn integration:durability
 ```
 
 The test executes 100 PostgreSQL transactions and verifies they remain one architecture node. It
 also verifies every documented Mongoose and Redis operation, RabbitMQ producer and both consumer
 paths, outgoing HTTP, the cache miss/hit path, the local event listener, one correlated API-to-worker
 trace, and deterministic PostgreSQL, MongoDB, Redis, RabbitMQ, HTTP, business, and worker failures.
+The durability scenario then stops the TypeScript sink, admits telemetry to the Go spool,
+force-kills the Go process, and verifies restart replay and checkpoint removal. The Go collector's
+default delivery contract is at least once; the controlled scenario observes one canonical call but
+does not claim exactly-once delivery.
+
+The compact topology compatibility corpus can be run without Docker:
+
+```bash
+yarn test:golden
+```
 
 Focused fixtures are available at `POST /integration/postgres`, `/mongoose`, `/redis`, `/rabbitmq`,
 and `/http`; the application flow is also exposed as `POST /payments`, `GET /payments/:id`, and

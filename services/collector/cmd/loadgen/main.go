@@ -33,9 +33,12 @@ type config struct {
 
 type result struct {
 	TargetEventsPerSecond int     `json:"targetEventsPerSecond"`
-	DurationSeconds       float64 `json:"durationSeconds"`
+	DurationSeconds       float64 `json:"admissionDurationSeconds"`
+	ProcessingCatchupMS   float64 `json:"processingCatchupMs"`
+	DrainComplete         bool    `json:"drainComplete"`
 	AttemptedEvents       uint64  `json:"attemptedEvents"`
 	AcceptedEvents        uint64  `json:"acceptedEvents"`
+	ProcessedEvents       uint64  `json:"processedEvents"`
 	RejectedEvents        uint64  `json:"rejectedEvents"`
 	FailedEvents          uint64  `json:"failedEvents"`
 	ThroughputEventsSec   float64 `json:"throughputEventsPerSecond"`
@@ -43,6 +46,7 @@ type result struct {
 	LatencyP95MS          float64 `json:"latencyP95Ms"`
 	PeakHeapBytes         float64 `json:"peakCollectorHeapBytes"`
 	PeakQueueDepth        float64 `json:"peakQueueDepth"`
+	PeakSpoolBytes        float64 `json:"peakSpoolBytes"`
 	AverageCPUPercent     float64 `json:"averageCollectorCpuPercent"`
 }
 
@@ -58,6 +62,7 @@ type counters struct {
 type sample struct {
 	heap  float64
 	queue float64
+	spool float64
 	cpu   float64
 }
 
@@ -101,7 +106,10 @@ func run(ctx context.Context, config config) (result, error) {
 		return result{}, err
 	}
 
-	before, _ := scrape(client, config.target)
+	before, err := scrape(client, config.target)
+	if err != nil {
+		return result{}, fmt.Errorf("scrape initial collector metrics: %w", err)
+	}
 	state := &counters{latencies: make([]float64, 0, config.rate*int(config.duration.Seconds())/config.eventsPerRequest)}
 	jobs := make(chan int, config.concurrency*4)
 	var workers sync.WaitGroup
@@ -142,20 +150,30 @@ func run(ctx context.Context, config config) (result, error) {
 	close(jobs)
 	workers.Wait()
 	elapsed := time.Since(start)
+	accepted := state.accepted.Load()
+	catchupStarted := time.Now()
+	drainComplete := waitUntilProcessed(ctx, client, config.target, before["nodeflow_collector_telemetry_processed_total"]+float64(accepted), 30*time.Second)
+	catchup := time.Since(catchupStarted)
 	stopSampling()
 	peak := <-samples
-	after, _ := scrape(client, config.target)
+	after, err := scrape(client, config.target)
+	if err != nil {
+		return result{}, fmt.Errorf("scrape final collector metrics: %w", err)
+	}
 
 	state.mutex.Lock()
 	latencies := append([]float64(nil), state.latencies...)
 	state.mutex.Unlock()
-	accepted := state.accepted.Load()
 	cpuDelta := after["nodeflow_collector_process_cpu_seconds_total"] - before["nodeflow_collector_process_cpu_seconds_total"]
+	processed := uint64(max(0, after["nodeflow_collector_telemetry_processed_total"]-before["nodeflow_collector_telemetry_processed_total"]))
 	return result{
 		TargetEventsPerSecond: config.rate,
 		DurationSeconds:       round(elapsed.Seconds()),
+		ProcessingCatchupMS:   round(float64(catchup.Microseconds()) / 1_000),
+		DrainComplete:         drainComplete,
 		AttemptedEvents:       state.attempted.Load(),
 		AcceptedEvents:        accepted,
+		ProcessedEvents:       processed,
 		RejectedEvents:        state.rejected.Load(),
 		FailedEvents:          state.failed.Load(),
 		ThroughputEventsSec:   round(float64(accepted) / elapsed.Seconds()),
@@ -163,7 +181,8 @@ func run(ctx context.Context, config config) (result, error) {
 		LatencyP95MS:          percentile(latencies, 0.95),
 		PeakHeapBytes:         peak.heap,
 		PeakQueueDepth:        peak.queue,
-		AverageCPUPercent:     round(cpuDelta / elapsed.Seconds() * 100),
+		PeakSpoolBytes:        peak.spool,
+		AverageCPUPercent:     round(cpuDelta / (elapsed + catchup).Seconds() * 100),
 	}, nil
 }
 
@@ -215,10 +234,30 @@ func send(ctx context.Context, client *http.Client, config config, count int, st
 	response.Body.Close()
 	if response.StatusCode == http.StatusAccepted {
 		state.accepted.Add(uint64(count))
-	} else if response.StatusCode == http.StatusTooManyRequests {
+	} else if response.StatusCode == http.StatusTooManyRequests || response.StatusCode == http.StatusInsufficientStorage {
 		state.rejected.Add(uint64(count))
 	} else {
 		state.failed.Add(uint64(count))
+	}
+}
+
+func waitUntilProcessed(ctx context.Context, client *http.Client, target string, expected float64, timeout time.Duration) bool {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		values, err := scrape(client, target)
+		if err == nil && values["nodeflow_collector_telemetry_processed_total"] >= expected {
+			return true
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-deadline.C:
+			return false
+		case <-ticker.C:
+		}
 	}
 }
 
@@ -255,6 +294,7 @@ func sampleMetrics(ctx context.Context, client *http.Client, target string, resu
 			if err == nil {
 				peak.heap = max(peak.heap, values["nodeflow_collector_process_heap_bytes"])
 				peak.queue = max(peak.queue, values["nodeflow_collector_queue_depth"])
+				peak.spool = max(peak.spool, values["nodeflow_collector_spool_bytes"])
 			}
 		}
 	}
