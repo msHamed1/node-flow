@@ -1,10 +1,11 @@
 # Golden topology compatibility corpus
 
-The TypeScript `TopologyEngine` is NodeFlow's semantic source of truth during the V2 collector
-migration. The golden corpus under `packages/topology-engine/test` converts deterministic telemetry
-batches into `nodeflow.topology-golden.v1`, a compact JSON-serializable representation used by the
-TypeScript-versus-Go differential tests. The fixture source uses TypeScript only for schema
-checking; inputs and expected values contain no functions, dates, maps, or TypeScript-only values.
+The Go topology engine is NodeFlow's V2.4 npm and container runtime authority. The retained
+TypeScript `TopologyEngine` is the rollback and semantic reference implementation. The golden corpus
+under `packages/topology-engine/test` converts deterministic telemetry batches into
+`nodeflow.topology-golden.v1`, a compact JSON-serializable representation used by the
+TypeScript-versus-Go differential tests. The fixture source uses TypeScript only for schema checking;
+inputs and expected values contain no functions, dates, maps, or TypeScript-only values.
 
 ## Compatibility contract
 
@@ -28,7 +29,8 @@ presentation rather than architecture equivalence.
 ## Normalization
 
 Canonicalization sorts services and nodes lexically, edges by stable edge ID, and paths by entrypoint
-plus their ordered node chain. Metrics are already rounded by the source-of-truth engine.
+plus their ordered node chain. Metrics are rounded to the shared compatibility contract before
+comparison.
 This removes JavaScript map insertion order and telemetry arrival order from comparisons without
 discarding dependency direction or runtime-path order.
 
@@ -46,11 +48,10 @@ recursive same-service calls, duplicate replay, missing parents, late/out-of-ord
 roots, shared dependencies, mixed dependency types, and multi-service traces.
 
 The Go differential runner executes each fixture in its native batching and in two deterministic
-seeded span-level permutations. It runs the TypeScript source-of-truth implementation and the
-isolated Go prototype from the same input, canonicalizes both snapshots, and reports missing or
-unexpected nodes and edges plus identity-specific node, edge, and path mismatches. This gives 42
-cross-language comparisons (45 with the current corpus) without expanding the checked-in corpus
-into unstable snapshots.
+seeded span-level permutations. It runs the retained TypeScript reference implementation and the Go
+production engine from the same input, canonicalizes both snapshots, and reports missing or
+unexpected nodes and edges plus identity-specific node, edge, and path mismatches. This gives 45
+cross-language comparisons without expanding the checked-in corpus into unstable snapshots.
 
 Run it with:
 

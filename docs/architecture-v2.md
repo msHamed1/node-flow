@@ -27,7 +27,7 @@ The collector calls the topology engine synchronously in the HTTP handler. The t
 already a separate package, but transport and projection share one process and there is no explicit
 ingress capacity boundary.
 
-## Current V2.4 production path
+## Current V2.4 npm and container path
 
 ```text
 Node.js application
@@ -53,10 +53,18 @@ of HTTP and Protobuf; an internal sink adapter translates normalized collector e
 language-neutral event model. The Go service owns the public snapshot, architecture, WebSocket,
 health, metrics, and built-dashboard routes.
 
+For npm installations, the lightweight TypeScript CLI resolves one exact-version optional runtime
+package for macOS arm64/x64, Linux arm64/x64, or Windows x64. It starts the packaged Go binary,
+receives the actual bound address through the `json-v1` startup control event, waits for `/readyz`,
+and only then starts the instrumented application. The dashboard remains bundled in the main npm
+package and its installed absolute path is passed to Go.
+
 `NODEFLOW_TOPOLOGY_ENGINE=typescript` is an emergency rollback. In that mode the Go collector sends
 normalized telemetry to the retained TypeScript collector and reverse-proxies its topology REST and
-WebSocket routes. Compose starts that service only with the `typescript-rollback` profile. This is
-single-write fallback, not default shadowing or dual-write.
+WebSocket routes. Compose starts that service as `nodeflow-typescript-rollback` only with the
+`typescript-rollback` profile. The legacy `NODEFLOW_SINK=http` value cannot select it without the
+explicit topology-engine setting. This is single-write fallback, not default shadowing or
+dual-write.
 
 ## Ownership
 
@@ -135,15 +143,14 @@ contain only telemetry after the collector's validation and redaction boundary.
 - Node.js, NestJS, and OpenTelemetry instrumentation remain TypeScript permanently.
 - The React dashboard remains TypeScript but consumes Go snapshots without a compatibility backend.
 - The TypeScript `TopologyEngine` and collector remain in the repository for differential tests,
-  the emergency Compose profile, and the existing embedded npm CLI workflow.
-- The npm CLI does not yet distribute or launch platform-specific Go binaries. `node-flow dev` and
-  `node-flow collector` therefore retain their existing TypeScript local behavior; the container
-  production path is Go-authoritative.
+  public compatibility, and the emergency Compose profile.
+- `node-flow dev` and `node-flow collector` now use the version-matched Go runtime. The TypeScript
+  collector is no longer part of the main package's normal dependency or execution path.
 
 ## Deliberately deferred
 
 - gRPC/OTLP receiver adapters.
-- Cross-platform distribution of the Go binary through the npm CLI.
+- Additional npm runtime targets beyond macOS arm64/x64, Linux arm64/x64, and Windows x64.
 - Remote/multi-tenant collection and authentication.
 - Idempotency after bounded trace-history eviction or intentionally resetting the Go state file.
 - Reconciliation of topology accumulated while TypeScript rollback mode is active. Because rollback

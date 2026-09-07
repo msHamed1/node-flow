@@ -29,7 +29,7 @@ interface EngineResults {
 }
 
 describe('Go TopologyEngine compatibility', () => {
-  it('matches the TypeScript source of truth for native and deterministic randomized arrival orders', () => {
+  it('matches the TypeScript reference for native and deterministic randomized arrival orders', () => {
     const candidates = goldenFixtures().flatMap(differentialVariants);
     const goByName = runGoPrototype(candidates);
     const failures: string[] = [];

@@ -68,8 +68,8 @@ npx node-flow dev -- npm run start:dev
 
 Open [http://127.0.0.1:7331](http://127.0.0.1:7331), then use the application normally or send a
 request with `curl`. The graph is derived from the routes, controllers, providers, databases,
-caches, queues, and external services that actually execute. Telemetry stays in memory on your
-machine and is not uploaded.
+caches, queues, and external services that actually execute. Telemetry and the bounded local
+runtime state stay on your machine and are not uploaded.
 
 ## What NodeFlow helps you understand
 
@@ -99,10 +99,10 @@ The graph-first local dashboard includes:
 
 NodeFlow is designed for local development.
 
-- The collector binds to `127.0.0.1`.
+- The npm CLI launches the version-matched Go runtime and binds it to `127.0.0.1` by default.
 - Telemetry remains on the developer's machine.
-- Runtime data is stored only in memory.
-- Restarting NodeFlow clears the captured data.
+- The Go runtime persists its bounded WAL and topology checkpoint only in the local `.nodeflow`
+  directory, or on the configured container volume.
 - There are no accounts, API keys, analytics, cloud synchronization, or remote collectors.
 
 Do not expose the NodeFlow collector or dashboard to a public network.
@@ -124,8 +124,8 @@ controller and provider boundaries and aggregates completed traces into a runtim
 
 ### NodeFlow V2 Go collector
 
-V2.4 makes Go the default container collector and topology authority without moving Node.js-specific
-instrumentation out of TypeScript:
+V2.4 makes Go the default npm and container collector and topology authority without moving
+Node.js-specific instrumentation out of TypeScript:
 
 ```mermaid
 flowchart LR
@@ -142,21 +142,29 @@ shutdown, collector metrics, topology reconstruction, durable topology state, sn
 APIs, WebSocket publication, and static dashboard hosting. TypeScript continues to own
 Node.js/OpenTelemetry integration, NestJS discovery, and the React dashboard. The TypeScript engine
 remains available for differential tests and `NODEFLOW_TOPOLOGY_ENGINE=typescript` emergency
-rollback. The existing npm CLI still uses its embedded TypeScript collector until portable Go binary
-distribution is implemented; the Docker production path is Go-authoritative.
+rollback. The npm CLI resolves an exact-version, platform-specific optional package, starts its Go
+binary, waits for the runtime readiness contract, and then launches the instrumented application.
+
+The rollback profile names the retained backend explicitly as `nodeflow-typescript-rollback`.
+`NODEFLOW_TOPOLOGY_ENGINE` is the authority selector; the legacy `NODEFLOW_SINK=http` value cannot
+switch a Go-authoritative process into rollback mode by itself.
 
 The preferred V2 wire format is Protocol Buffers, while the existing JSON ingestion endpoints stay
 available for compatibility. See [the V2 architecture](./docs/architecture-v2.md),
 [migration design](./docs/migrations/collector-go-v2.md), and
-[Go collector runbook](./services/collector/README.md).
+[Go collector runbook](./services/collector/README.md). The
+[npm runtime distribution contract](./docs/distribution/npm-go-runtime.md) documents supported
+platforms, package pairing, startup, and troubleshooting.
 
 ## Release and compatibility
 
-The current stable npm release is
-[`@mshamed1/node-flow@1.0.0`](https://www.npmjs.com/package/@mshamed1/node-flow). NodeFlow requires
+The current stable release is available from
+[`@mshamed1/node-flow` on npm](https://www.npmjs.com/package/@mshamed1/node-flow). NodeFlow requires
 Node.js 20 or newer. Its public package surface, transitive runtime packages, CLI binary, exports,
-bundled dashboard, package smoke tests, Changesets configuration, and npm trusted-publishing
-workflow use the `@mshamed1` npm scope, with `@mshamed1/node-flow` as the primary package.
+bundled dashboard, package smoke tests, Changesets configuration, and npm trusted-publishing workflow
+use the `@mshamed1` npm scope, with `@mshamed1/node-flow` as the primary package. The main package
+declares exact-version optional Go runtime packages; npm installs the package that matches the
+consumer's operating system and CPU.
 
 NodeFlow is licensed under Apache License 2.0. See [RELEASE.md](./RELEASE.md) for the one-time npm
 bootstrap and the automated release process.
@@ -427,7 +435,7 @@ filename is `nodeflow.config.ts`.
 | `NODEFLOW_COLLECTOR_URL`   | `http://127.0.0.1:7331`  | Shared collector used by `node-flow run`    |
 | `NODEFLOW_SERVICE_NAME`    | Application package name | Name reported by the instrumented process   |
 | `NODEFLOW_DEBUG`           | Disabled                 | Set to `1` to log telemetry export failures |
-| `NODEFLOW_EXPORT_PROTOCOL` | `json`                   | Use `protobuf` with the V2 Go collector     |
+| `NODEFLOW_EXPORT_PROTOCOL` | `dev`: `protobuf`        | Override the instrumentation wire format    |
 
 Example:
 
@@ -599,7 +607,11 @@ The compact topology compatibility corpus can be run without Docker:
 
 ```bash
 yarn test:golden
+yarn test:topology-diff
 ```
+
+The Go engine is the V2.4 runtime authority; these tests keep the retained TypeScript engine aligned
+as the rollback and semantic reference implementation.
 
 Focused fixtures are available at `POST /integration/postgres`, `/mongoose`, `/redis`, `/rabbitmq`,
 and `/http`; the application flow is also exposed as `POST /payments`, `GET /payments/:id`, and
@@ -691,8 +703,11 @@ NODEFLOW_DEBUG=1 npx node-flow dev -- npm run start:dev
   Changeset controls the next release.
 - One `NodeFlowModule` import remains required because NestJS has no public preload-to-container
   discovery hook.
-- The Go container path durably restores topology state. The embedded npm CLI's TypeScript collector
-  remains process-local and clears state on restart.
+- Portable npm runtimes currently support macOS arm64/x64, Linux arm64/x64, and Windows x64. Other
+  targets fail with an explicit unsupported-platform message.
+- The TypeScript collector and `TopologyEngine` remain published for public compatibility,
+  differential testing, and the explicit Compose rollback profile; normal npm CLI operation no
+  longer installs or launches the TypeScript collector.
 - Automatic provider discovery covers singleton class providers created during bootstrap.
 - Request-scoped, transient, and dynamically created providers are intentionally skipped.
 - Inherited methods, instance arrow functions, accessors, lifecycle hooks, framework providers, and
@@ -715,8 +730,16 @@ yarn format:check
 yarn build
 yarn lint
 yarn test
+yarn test:golden
+yarn test:topology-diff
 yarn package:check
 yarn package:smoke
+yarn runtime:check:current
+yarn proto:check
+yarn go:build
+yarn go:vet
+yarn go:test
+yarn go:race
 yarn integration:up
 yarn integration:test
 yarn integration:down

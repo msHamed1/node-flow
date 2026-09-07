@@ -24,10 +24,12 @@ npx node-flow dev -- npm run start:dev
 
 This command:
 
-1. Starts the collector and bundled dashboard on `127.0.0.1:7331`.
-2. Adds the NodeFlow preload to the child process through `NODE_OPTIONS`.
-3. Launches the command after `--` with `NODEFLOW_COLLECTOR_URL` configured.
-4. Forwards termination signals and closes the collector when the application exits.
+1. Resolves the exact-version Go runtime package for the current operating system and CPU.
+2. Starts the Go collector and bundled dashboard on `127.0.0.1:7331`.
+3. Waits for its machine-readable startup event and `/readyz` response.
+4. Adds the NodeFlow preload to the child process through `NODE_OPTIONS` and selects Protobuf.
+5. Launches the command after `--` with the actual `NODEFLOW_COLLECTOR_URL` configured.
+6. Forwards termination signals and closes the runtime when the application exits.
 
 Open [http://127.0.0.1:7331](http://127.0.0.1:7331) and exercise the application to populate the
 map.
@@ -126,14 +128,22 @@ the distinction.
 
 ## Configuration
 
-| Variable                 | Default                  | Purpose                                    |
-| ------------------------ | ------------------------ | ------------------------------------------ |
-| `NODEFLOW_HOST`          | `127.0.0.1`              | Collector bind host                        |
-| `NODEFLOW_PORT`          | `7331`                   | Collector and dashboard port               |
-| `NODEFLOW_COLLECTOR_URL` | `http://127.0.0.1:7331`  | Collector used by an instrumented process  |
-| `NODEFLOW_SERVICE_NAME`  | Current npm package name | Service name attached to telemetry         |
-| `NODEFLOW_DASHBOARD_DIR` | Bundled dashboard        | Override for dashboard assets              |
-| `NODEFLOW_DEBUG`         | Disabled                 | Set to `1` to log failed telemetry exports |
+| Variable                           | Default                  | Purpose                                    |
+| ---------------------------------- | ------------------------ | ------------------------------------------ |
+| `NODEFLOW_HOST`                    | `127.0.0.1`              | Collector bind host                        |
+| `NODEFLOW_PORT`                    | `7331`                   | Collector and dashboard port               |
+| `NODEFLOW_COLLECTOR_URL`           | `http://127.0.0.1:7331`  | Collector used by an instrumented process  |
+| `NODEFLOW_SERVICE_NAME`            | Current npm package name | Service name attached to telemetry         |
+| `NODEFLOW_DASHBOARD_DIR`           | Bundled dashboard        | Override for dashboard assets              |
+| `NODEFLOW_DEBUG`                   | Disabled                 | Set to `1` to log failed telemetry exports |
+| `NODEFLOW_STARTUP_TIMEOUT_MS`      | `15000`                  | Maximum wait for runtime readiness         |
+| `NODEFLOW_RUNTIME_STOP_TIMEOUT_MS` | `10000`                  | Grace period before forced runtime stop    |
+
+Set `NODEFLOW_PORT=0` to request a free port. The Go process binds first and emits a versioned JSON
+control event containing the actual URL; the CLI does not infer the port from human log text.
+
+The portable CLI always selects Go topology authority. For an emergency TypeScript rollback, use
+the repository's explicit `typescript-rollback` Docker Compose profile.
 
 ## Package responsibilities
 
@@ -141,16 +151,23 @@ This package is the public entry point over smaller runtime packages:
 
 - `node-flow-instrumentation-node` initializes OpenTelemetry and exports local telemetry.
 - `node-flow-instrumentation-nestjs` adds controller and provider semantics.
-- `node-flow-collector` accepts telemetry and serves the dashboard.
-- `node-flow-topology-engine` derives nodes, dependencies, metrics, traces, and runtime paths.
+- `node-flow-collector-<platform>-<arch>` supplies the version-matched Go runtime binary.
+- The Go runtime accepts telemetry and derives nodes, dependencies, metrics, traces, and runtime
+  paths.
+- `node-flow-topology-engine` supplies snapshot utilities and the retained rollback/reference
+  implementation.
 - `node-flow-protocol` defines the contracts exchanged between those components.
 - `node-flow-core` provides optional manual boundary helpers.
 
 ## Privacy and scope
 
-NodeFlow is intended for local development. The default collector binds only to `127.0.0.1`, keeps
-telemetry in memory, and does not provide authentication or transport encryption. Do not expose it
-to a public or untrusted network.
+NodeFlow is intended for local development. The default collector binds only to `127.0.0.1`, stores
+its bounded WAL and topology checkpoint under the local `.nodeflow` directory, and does not provide
+authentication or transport encryption. Do not expose it to a public or untrusted network.
+
+See the
+[portable runtime distribution contract](https://github.com/msHamed1/node-flow/blob/main/docs/distribution/npm-go-runtime.md)
+for the supported platform matrix, version contract, failure messages, and container alternative.
 
 For the complete guide, supported integrations, troubleshooting, and current limitations, see the
 [repository README](https://github.com/msHamed1/node-flow#readme).

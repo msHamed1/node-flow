@@ -1,11 +1,13 @@
 # @mshamed1/node-flow-topology-engine
 
-The framework-independent, in-memory engine that turns normalized telemetry spans into NodeFlow's
-runtime architecture.
+The framework-independent TypeScript engine that turns normalized telemetry spans into NodeFlow's
+runtime architecture. In V2.4 it powers the explicit rollback path, remains the TypeScript-side
+snapshot utility boundary, and serves as the semantic reference implementation for Go differential
+tests. The Go topology engine is the default npm and container authority.
 
-The local collector owns an engine instance and feeds it span batches and process metrics. The
-engine owns aggregation and derived state; it does not receive HTTP requests, export telemetry, or
-render the dashboard.
+The TypeScript collector owns an engine instance and feeds it span batches and process metrics. The
+engine owns aggregation and derived state within that process; it does not receive HTTP requests,
+export telemetry, or render the dashboard.
 
 Application developers should normally install
 [`@mshamed1/node-flow`](https://www.npmjs.com/package/@mshamed1/node-flow) instead of using this
@@ -165,7 +167,8 @@ Custom thresholds can be passed as the third argument to `compareSnapshots()`.
 
 ## Runtime and ownership boundaries
 
-- All state is process-local and in memory; restarting the collector resets it.
+- This TypeScript implementation keeps state in memory; restarting the rollback collector resets
+  it. The default Go npm/container authority persists its own topology checkpoint.
 - The engine trusts that incoming spans were normalized at the instrumentation boundary.
 - Topology represents executed traffic only. Unexercised code and dependencies do not appear.
 - Recent traces, percentile samples, and distinct runtime paths are bounded to control memory.

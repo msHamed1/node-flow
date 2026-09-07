@@ -6,7 +6,17 @@ batches work through service-sharded workers, reconstructs the authoritative top
 serves the snapshot API, WebSocket stream, and built React dashboard.
 
 The TypeScript topology engine remains a reference and emergency rollback implementation. It is not
-started or called by the default container path.
+started or called by the default npm or container path.
+
+## npm-distributed runtime
+
+`@mshamed1/node-flow` installs this collector through an exact-version optional package selected by
+npm `os`/`cpu` metadata. Supported native targets are macOS arm64/x64, Linux arm64/x64, and Windows
+x64. `node-flow collector` and `node-flow dev` launch that binary directly; they do not require a Go
+toolchain. The CLI supplies the installed dashboard path, supports `NODEFLOW_PORT=0`, waits for the
+versioned startup event and `/readyz`, and forwards shutdown signals.
+
+See [the portable npm runtime contract](../../docs/distribution/npm-go-runtime.md).
 
 ## Processing lifecycle
 
@@ -115,7 +125,8 @@ span, and bounded identifier/name/value lengths.
 | `NODEFLOW_SINK_TIMEOUT`          | `5s`                          | Timeout for each downstream HTTP operation              |
 | `NODEFLOW_SHUTDOWN_TIMEOUT`      | `15s`                         | Drain deadline after SIGINT/SIGTERM                     |
 | `NODEFLOW_LOG_LEVEL`             | `info`                        | `debug`, `info`, `warn`, or `error`                     |
-| `NODEFLOW_SINK`                  | `topology`                    | Direct topology; `http` rollback; benchmark `discard`   |
+| `NODEFLOW_STARTUP_PROTOCOL`      | empty                         | CLI control output; only `json-v1` is supported         |
+| `NODEFLOW_SINK`                  | `topology`                    | Topology processing or benchmark-only `discard`         |
 | `NODEFLOW_SPOOL_MODE`            | `group-commit`                | `group-commit`, `sync`, `legacy`, or `memory`           |
 | `NODEFLOW_SPOOL_DIR`             | `.nodeflow/spool`             | WAL segments and durable checkpoints                    |
 | `NODEFLOW_SPOOL_MAX_BYTES`       | `536870912`                   | Logical WAL/checkpoint cap, including reserved metadata |
@@ -147,6 +158,10 @@ Checkpoint write failure keeps the telemetry record active and enters the normal
 path. Its size is observable but is not counted inside `NODEFLOW_SPOOL_MAX_BYTES`; deployments must
 leave room for the current file and its temporary replacement on the same bounded filesystem.
 
+`NODEFLOW_TOPOLOGY_ENGINE` is the sole topology-authority selector. The deprecated
+`NODEFLOW_SINK=http` value remains accepted only alongside
+`NODEFLOW_TOPOLOGY_ENGINE=typescript`; it cannot silently override the default Go authority.
+
 ## Graceful shutdown
 
 SIGINT or SIGTERM closes admission before the HTTP listener drains and gives workers the configured
@@ -166,6 +181,9 @@ The Go collector continues to own admission, WAL, and retry; it forwards normali
 through the retained HTTP sink and proxies snapshot, architecture, and WebSocket reads. No schema or
 WAL migration is needed. This deliberately does not dual-write: switching back to Go resumes the
 last Go checkpoint and does not import topology accumulated during rollback.
+
+The profile starts the rollback backend as `nodeflow-typescript-rollback`; the Go collector reaches
+it at `http://nodeflow-typescript-rollback:7331` on the Compose network.
 
 ## Metrics
 
@@ -193,6 +211,11 @@ docker run --rm \
 The image uses a statically linked Go binary, an unprivileged runtime user, and a minimal Alpine
 runtime with CA certificates. Do not publish the collector to an untrusted network; V2 does not yet
 include authentication or transport encryption for its local development boundary.
+
+Tagged releases publish `ghcr.io/mshamed1/node-flow-collector:<package-version>` and a commit-SHA tag
+as one `linux/amd64` plus `linux/arm64` manifest. Production-style use should pin the immutable
+manifest digest rather than a mutable tag. The manual rollback workflow validates a previous digest
+against the current image's persisted topology/WAL volume before promotion.
 
 ## Verification
 

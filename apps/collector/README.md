@@ -1,10 +1,13 @@
 # @mshamed1/node-flow-collector
 
-The local in-memory telemetry collector and dashboard server launched by the NodeFlow CLI. This is
-a transitive runtime dependency; application developers should install
+The retained in-memory TypeScript telemetry collector and dashboard server. Application developers
+should install
 [`@mshamed1/node-flow`](https://www.npmjs.com/package/@mshamed1/node-flow).
 
-This TypeScript implementation remains the stable npm/CLI collector and owns the topology engine,
-WebSocket publication, and dashboard. NodeFlow V2 adds an optional Go ingestion service in
-`services/collector`; it forwards validated, bounded batches here during the migration. This
-package is not deprecated and its existing JSON endpoints remain compatible.
+In V2.4 the Go service in `services/collector` is the default npm and container collector and
+topology authority. The main npm CLI no longer depends on or launches this package. This TypeScript
+implementation remains active for the explicit `nodeflow-typescript-rollback` Compose service,
+public API compatibility, and topology reference/differential tests. The Go collector forwards
+validated, bounded batches here only when `NODEFLOW_TOPOLOGY_ENGINE=typescript` selects rollback.
+This package has not yet been removed or deprecated, and its existing JSON endpoints remain
+compatible.

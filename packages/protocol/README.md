@@ -3,9 +3,10 @@
 Shared TypeScript contracts for telemetry, live topology, architecture snapshots, runtime metrics,
 and collector messages across NodeFlow packages.
 
-The V2 protocol also provides a dependency-light TypeScript Protobuf codec. The language-neutral
-schemas live under `proto/nodeflow/v1`; checked-in Go bindings are generated into
-`services/collector/gen/nodeflow/v1`.
+The V2 protocol also provides a dependency-light TypeScript Protobuf codec. The active
+language-neutral ingestion schema is `proto/nodeflow/v1/telemetry.proto`; its checked-in Go binding
+is generated into `services/collector/gen/nodeflow/v1/telemetry.pb.go`. Topology snapshots use the
+shared JSON/TypeScript contract and the native Go model rather than a second Protobuf schema.
 
 This package contains types and endpoint constants, not runtime processing. It is published so the
 NodeFlow package graph can be installed from npm without copying contracts between the
@@ -21,7 +22,7 @@ instrumentation-node
   ├─ TelemetryEnvelope/SpanBatch ─────> collector
   └─ TelemetryEnvelope/RuntimeMetrics ─> collector
 
-collector + topology-engine
+Go npm/container collector and topology authority, or retained TypeScript rollback/reference path
   ├─ TopologySnapshot ─────────> live dashboard / WebSocket
   └─ NodeFlowSnapshot ─────────> CLI snapshot files and comparison
 ```
@@ -104,10 +105,11 @@ function countComponents(snapshot: NodeFlowSnapshot): number {
 
 ## Version and validation boundary
 
-The protocol defines the shape of `NodeFlowSnapshot`, while
+The protocol defines the TypeScript shape of `NodeFlowSnapshot`, while
 [`@mshamed1/node-flow-topology-engine`](https://github.com/msHamed1/node-flow/tree/main/packages/topology-engine#readme)
-owns runtime validation, normalization, serialization, comparison, and the currently supported
-snapshot version.
+owns TypeScript-side validation, normalization, serialization, comparison, and the currently
+supported snapshot version. The V2.4 Go authority validates and serves its native equivalent; the
+golden and differential suites enforce compatibility between both implementations.
 
 TypeScript types disappear at runtime. Any snapshot or collector payload arriving from disk or the
 network must still be validated at the receiving boundary.
