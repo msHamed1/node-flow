@@ -1,0 +1,19 @@
+# syntax=docker/dockerfile:1.7
+FROM golang:1.24-alpine AS build
+
+WORKDIR /src
+COPY services/collector/go.mod services/collector/go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+COPY services/collector/ ./
+ARG VERSION=dev
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/nodeflow-collector ./cmd/nodeflow-collector
+
+FROM alpine:3.21
+RUN apk add --no-cache ca-certificates
+COPY --from=build /out/nodeflow-collector /usr/local/bin/nodeflow-collector
+USER 65532:65532
+EXPOSE 4318
+HEALTHCHECK --interval=5s --timeout=2s --retries=12 \
+  CMD wget -q -O /dev/null http://127.0.0.1:4318/readyz || exit 1
+ENTRYPOINT ["/usr/local/bin/nodeflow-collector"]

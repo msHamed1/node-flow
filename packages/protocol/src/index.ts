@@ -87,6 +87,20 @@ export interface RuntimeMetrics {
   uptimeSeconds: number;
 }
 
+export const NODEFLOW_PROTOCOL_VERSION = '1.0' as const;
+
+export type TelemetryEnvelope =
+  | {
+      protocolVersion: typeof NODEFLOW_PROTOCOL_VERSION;
+      spanBatch: SpanBatch;
+      runtimeMetrics?: never;
+    }
+  | {
+      protocolVersion: typeof NODEFLOW_PROTOCOL_VERSION;
+      spanBatch?: never;
+      runtimeMetrics: RuntimeMetrics;
+    };
+
 export interface TopologySnapshot {
   revision: number;
   generatedAt: number;
@@ -163,6 +177,7 @@ export type CollectorMessage =
   | { type: 'connected'; payload: { version: string } };
 
 export const collectorPaths = {
+  protobufTelemetry: '/v1/telemetry',
   spans: '/api/spans',
   runtime: '/api/runtime',
   snapshot: '/api/snapshot',
@@ -170,3 +185,5 @@ export const collectorPaths = {
   health: '/api/health',
   websocket: '/ws',
 } as const;
+
+export { decodeTelemetryEnvelope, encodeTelemetryEnvelope } from './protobuf.js';

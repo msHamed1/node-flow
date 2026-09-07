@@ -8,7 +8,8 @@ x-nodeflow-build: &nodeflow-build
     dockerfile: Dockerfile.integration
 
 x-nodeflow-environment: &nodeflow-environment
-  NODEFLOW_COLLECTOR_URL: http://nodeflow:7331
+  NODEFLOW_COLLECTOR_URL: http://nodeflow-collector:4318
+  NODEFLOW_EXPORT_PROTOCOL: protobuf
   POSTGRES_HOST: postgres
   POSTGRES_PORT: 5432
   POSTGRES_USER: ${POSTGRES_USER:-nodeflow}
@@ -94,6 +95,28 @@ services:
       timeout: 3s
       retries: 30
 
+  nodeflow-collector:
+    build:
+      context: .
+      dockerfile: Dockerfile.collector
+    environment:
+      NODEFLOW_GO_LISTEN_ADDR: 0.0.0.0:4318
+      NODEFLOW_TOPOLOGY_URL: http://nodeflow:7331
+      NODEFLOW_WORKERS: ${NODEFLOW_WORKERS:-8}
+      NODEFLOW_QUEUE_SIZE: ${NODEFLOW_QUEUE_SIZE:-10000}
+      NODEFLOW_BATCH_SIZE: ${NODEFLOW_BATCH_SIZE:-250}
+      NODEFLOW_FLUSH_INTERVAL: ${NODEFLOW_FLUSH_INTERVAL:-500ms}
+    depends_on:
+      nodeflow:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:4318:4318'
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:4318/readyz']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
   mock-risk-service:
     <<: *nodeflow-runtime
     command:
@@ -106,11 +129,12 @@ services:
         'apps/mock-risk-service/dist/main.js',
       ]
     environment:
-      NODEFLOW_COLLECTOR_URL: http://nodeflow:7331
+      NODEFLOW_COLLECTOR_URL: http://nodeflow-collector:4318
+      NODEFLOW_EXPORT_PROTOCOL: protobuf
       NODEFLOW_SERVICE_NAME: mock-risk-service
       PORT: 3100
     depends_on:
-      nodeflow:
+      nodeflow-collector:
         condition: service_healthy
     ports:
       - '127.0.0.1:3100:3100'
@@ -148,7 +172,7 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      nodeflow:
+      nodeflow-collector:
         condition: service_healthy
     healthcheck:
       test:
@@ -180,7 +204,7 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      nodeflow:
+      nodeflow-collector:
         condition: service_healthy
       mock-risk-service:
         condition: service_healthy
