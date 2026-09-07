@@ -26,6 +26,22 @@ type HTTP struct {
 	logger  *slog.Logger
 }
 
+type HTTPStatusError struct {
+	StatusCode int
+	Message    string
+}
+
+func (failure *HTTPStatusError) Error() string {
+	return fmt.Sprintf("topology service returned HTTP %d: %s", failure.StatusCode, failure.Message)
+}
+
+func (failure *HTTPStatusError) Permanent() bool {
+	return failure.StatusCode >= 400 && failure.StatusCode < 500 &&
+		failure.StatusCode != http.StatusRequestTimeout &&
+		failure.StatusCode != http.StatusTooEarly &&
+		failure.StatusCode != http.StatusTooManyRequests
+}
+
 func NewHTTP(rawURL string, timeout time.Duration, metrics *collectormetrics.Collector, logger *slog.Logger) (*HTTP, error) {
 	parsed, err := url.Parse(rawURL)
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
@@ -134,7 +150,7 @@ func (sink *HTTP) postJSON(ctx context.Context, path string, payload any, target
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		message, _ := io.ReadAll(io.LimitReader(response.Body, 4_096))
-		return fmt.Errorf("topology service returned HTTP %d: %s", response.StatusCode, strings.TrimSpace(string(message)))
+		return &HTTPStatusError{StatusCode: response.StatusCode, Message: strings.TrimSpace(string(message))}
 	}
 	if target != nil {
 		if err := json.NewDecoder(io.LimitReader(response.Body, 64*1_024)).Decode(target); err != nil && !errors.Is(err, io.EOF) {

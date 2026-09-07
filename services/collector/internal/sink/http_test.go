@@ -3,6 +3,7 @@ package sink
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -15,6 +16,23 @@ import (
 	collectormetrics "github.com/msHamed1/node-flow/services/collector/internal/metrics"
 	"github.com/msHamed1/node-flow/services/collector/internal/telemetry"
 )
+
+func TestHTTPStatusErrorClassifiesPermanentAndRetryableFailures(t *testing.T) {
+	t.Parallel()
+	for _, status := range []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusNotFound} {
+		var failure error = &HTTPStatusError{StatusCode: status, Message: "bad record"}
+		var classified interface{ Permanent() bool }
+		if !errors.As(failure, &classified) || !classified.Permanent() {
+			t.Fatalf("expected HTTP %d to be permanent", status)
+		}
+	}
+	for _, status := range []int{http.StatusRequestTimeout, http.StatusTooEarly, http.StatusTooManyRequests, http.StatusServiceUnavailable} {
+		failure := &HTTPStatusError{StatusCode: status, Message: "retry"}
+		if failure.Permanent() {
+			t.Fatalf("expected HTTP %d to be retryable", status)
+		}
+	}
+}
 
 func TestHTTPSinkGroupsSpansAndKeepsNewestRuntimeSample(t *testing.T) {
 	t.Parallel()
