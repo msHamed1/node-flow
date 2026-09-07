@@ -64,6 +64,26 @@ func TestLegacyJSONCompatibilityAndRedaction(t *testing.T) {
 	}
 }
 
+func TestAuthoritativeLegacyResponseRetainsTopologyRevision(t *testing.T) {
+	api, processor, _ := newTestAPI(t)
+	defer stopPipeline(t, processor)
+	api.topologyAuthority = "go"
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/spans", bytes.NewBufferString(`{
+		"serviceName":"payments-api",
+		"spans":[{"traceId":"trace-1","spanId":"span-1","name":"work","kind":"service","startTimeUnixMs":1,"durationMs":1,"status":"ok"}]
+	}`))
+	request.Header.Set("Content-Type", "application/json")
+	api.Handler().ServeHTTP(response, request)
+	var acknowledgement map[string]uint64
+	if response.Code != http.StatusAccepted || json.NewDecoder(response.Body).Decode(&acknowledgement) != nil {
+		t.Fatalf("unexpected legacy response: status=%d body=%s", response.Code, response.Body.String())
+	}
+	if acknowledgement["accepted"] != 1 || acknowledgement["revision"] != 9 {
+		t.Fatalf("legacy topology response changed: %#v", acknowledgement)
+	}
+}
+
 func TestProtobufIngestion(t *testing.T) {
 	t.Parallel()
 	api, processor, sink := newTestAPI(t)

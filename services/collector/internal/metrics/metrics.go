@@ -12,50 +12,54 @@ import (
 )
 
 type Collector struct {
-	received        atomic.Uint64
-	processed       atomic.Uint64
-	rejectedFull    atomic.Uint64
-	rejectedSpool   atomic.Uint64
-	rejectedClosed  atomic.Uint64
-	rejectedInvalid atomic.Uint64
-	errors          atomic.Uint64
-	queueDepth      atomic.Int64
-	activeWorkers   atomic.Int64
-	topologyNodes   atomic.Int64
-	topologyEdges   atomic.Int64
-	spoolBytes      atomic.Int64
-	spoolActive     atomic.Int64
-	spoolQuarantine atomic.Int64
-	spoolRetries    atomic.Uint64
-	spoolReplayed   atomic.Uint64
-	spoolPermanent  atomic.Uint64
-	spoolCorrupt    atomic.Uint64
-	spoolDropped    atomic.Uint64
-	walBytes        atomic.Int64
-	walSegments     atomic.Int64
-	walPending      atomic.Int64
-	walQuarantine   atomic.Int64
-	walReplayed     atomic.Uint64
-	walCompactions  atomic.Uint64
-	walCompacted    atomic.Uint64
-	walCorrupt      atomic.Uint64
-	walDiskReject   atomic.Uint64
-	processing      *histogram
-	batchSize       *histogram
-	walAppend       *histogram
-	walSync         *histogram
-	walGroupRecords *histogram
-	walCompaction   *histogram
+	received           atomic.Uint64
+	processed          atomic.Uint64
+	rejectedFull       atomic.Uint64
+	rejectedSpool      atomic.Uint64
+	rejectedClosed     atomic.Uint64
+	rejectedInvalid    atomic.Uint64
+	errors             atomic.Uint64
+	queueDepth         atomic.Int64
+	activeWorkers      atomic.Int64
+	topologyNodes      atomic.Int64
+	topologyEdges      atomic.Int64
+	topologyUpdates    atomic.Uint64
+	topologyBytes      atomic.Int64
+	spoolBytes         atomic.Int64
+	spoolActive        atomic.Int64
+	spoolQuarantine    atomic.Int64
+	spoolRetries       atomic.Uint64
+	spoolReplayed      atomic.Uint64
+	spoolPermanent     atomic.Uint64
+	spoolCorrupt       atomic.Uint64
+	spoolDropped       atomic.Uint64
+	walBytes           atomic.Int64
+	walSegments        atomic.Int64
+	walPending         atomic.Int64
+	walQuarantine      atomic.Int64
+	walReplayed        atomic.Uint64
+	walCompactions     atomic.Uint64
+	walCompacted       atomic.Uint64
+	walCorrupt         atomic.Uint64
+	walDiskReject      atomic.Uint64
+	processing         *histogram
+	batchSize          *histogram
+	walAppend          *histogram
+	walSync            *histogram
+	walGroupRecords    *histogram
+	walCompaction      *histogram
+	topologyCheckpoint *histogram
 }
 
 func New() *Collector {
 	return &Collector{
-		processing:      newHistogram([]float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}),
-		batchSize:       newHistogram([]float64{1, 10, 25, 50, 100, 250, 500, 1_000, 5_000}),
-		walAppend:       newHistogram([]float64{0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1}),
-		walSync:         newHistogram([]float64{0.0001, 0.00025, 0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1}),
-		walGroupRecords: newHistogram([]float64{1, 2, 4, 8, 16, 32, 64, 128, 256, 512}),
-		walCompaction:   newHistogram([]float64{0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 1}),
+		processing:         newHistogram([]float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}),
+		batchSize:          newHistogram([]float64{1, 10, 25, 50, 100, 250, 500, 1_000, 5_000}),
+		walAppend:          newHistogram([]float64{0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1}),
+		walSync:            newHistogram([]float64{0.0001, 0.00025, 0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1}),
+		walGroupRecords:    newHistogram([]float64{1, 2, 4, 8, 16, 32, 64, 128, 256, 512}),
+		walCompaction:      newHistogram([]float64{0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 1}),
+		topologyCheckpoint: newHistogram([]float64{0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5}),
 	}
 }
 
@@ -93,6 +97,12 @@ func (c *Collector) ObserveBatchSize(size uint64) { c.batchSize.observe(float64(
 func (c *Collector) SetTopology(nodes, edges int) {
 	c.topologyNodes.Store(int64(nodes))
 	c.topologyEdges.Store(int64(edges))
+}
+
+func (c *Collector) RecordTopologyUpdate() { c.topologyUpdates.Add(1) }
+func (c *Collector) ObserveTopologyCheckpoint(elapsed time.Duration, bytes int64) {
+	c.topologyCheckpoint.observe(elapsed.Seconds())
+	c.topologyBytes.Store(bytes)
 }
 
 func (c *Collector) SetSpoolUsage(bytes int64, activeRecords int64, quarantinedRecords int64) {
@@ -143,6 +153,8 @@ func (c *Collector) writePrometheus(writer io.Writer) {
 	writeGauge(writer, "nodeflow_collector_active_workers", "Workers currently calling the configured sink.", c.activeWorkers.Load())
 	writeGauge(writer, "nodeflow_collector_topology_nodes", "Nodes reported by the downstream topology projection.", c.topologyNodes.Load())
 	writeGauge(writer, "nodeflow_collector_topology_edges", "Edges reported by the downstream topology projection.", c.topologyEdges.Load())
+	writeCounter(writer, "nodeflow_collector_topology_updates_total", "Topology batches committed by the configured topology authority.", c.topologyUpdates.Load())
+	writeGauge(writer, "nodeflow_collector_topology_state_bytes", "Bytes in the latest durable Go topology checkpoint.", c.topologyBytes.Load())
 	writeGauge(writer, "nodeflow_collector_spool_bytes", "Filesystem-allocated bytes retained by active and quarantined spool records.", c.spoolBytes.Load())
 	writeGauge(writer, "nodeflow_collector_spool_active_records", "Durable records awaiting successful delivery.", c.spoolActive.Load())
 	writeGauge(writer, "nodeflow_collector_spool_quarantined_records", "Corrupt or permanently failed records retained for inspection.", c.spoolQuarantine.Load())
@@ -164,12 +176,15 @@ func (c *Collector) writePrometheus(writer io.Writer) {
 	c.walSync.write(writer, "nodeflow_collector_wal_fsync_duration_seconds", "Latency of WAL data and checkpoint fsync operations.")
 	c.walGroupRecords.write(writer, "nodeflow_collector_wal_records_per_group_commit", "Records made durable by each WAL fsync group.")
 	c.walCompaction.write(writer, "nodeflow_collector_wal_compaction_duration_seconds", "Latency of WAL segment compaction passes that removed data.")
+	c.topologyCheckpoint.write(writer, "nodeflow_collector_topology_checkpoint_duration_seconds", "Latency of durable Go topology state checkpoints.")
 	c.processing.write(writer, "nodeflow_collector_processing_duration_seconds", "End-to-end queue and sink latency for an admitted envelope.")
 	c.batchSize.write(writer, "nodeflow_collector_batch_size", "Telemetry events delivered in one worker batch.")
 
 	var memory runtime.MemStats
 	runtime.ReadMemStats(&memory)
 	writeGauge(writer, "nodeflow_collector_process_heap_bytes", "Go heap bytes currently allocated.", int64(memory.HeapAlloc))
+	writeCounter(writer, "nodeflow_collector_process_allocated_bytes_total", "Cumulative bytes allocated by the Go process.", memory.TotalAlloc)
+	writeCounter(writer, "nodeflow_collector_process_allocations_total", "Cumulative heap allocations by the Go process.", memory.Mallocs)
 	writeGauge(writer, "nodeflow_collector_process_goroutines", "Current Go goroutine count.", int64(runtime.NumGoroutine()))
 	fmt.Fprintln(writer, "# HELP nodeflow_collector_process_cpu_seconds_total User and system CPU seconds consumed by the Go process.")
 	fmt.Fprintln(writer, "# TYPE nodeflow_collector_process_cpu_seconds_total counter")

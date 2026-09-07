@@ -9,6 +9,13 @@ await assertAutomaticInstrumentationSources();
 await waitFor(`${apiUrl}/health`, 'integration API');
 await waitFor(`${collectorUrl}/api/health`, 'NodeFlow collector');
 await waitFor(`${goCollectorUrl}/readyz`, 'NodeFlow Go collector');
+const collectorHealthResponse = await fetch(`${collectorUrl}/api/health`);
+assert(collectorHealthResponse.ok, `collector health returned ${collectorHealthResponse.status}`);
+const collectorHealth = await readBody(collectorHealthResponse);
+assert(
+  collectorHealth.topologyEngine === 'go' || collectorHealth.topologyEngine === 'typescript',
+  `collector reported unknown topology authority: ${collectorHealth.topologyEngine}`,
+);
 
 // Prove aggregation under load before retaining the richer scenarios below in
 // the collector's bounded recent-trace window.
@@ -168,7 +175,10 @@ console.log(`Validated ${snapshot.traces.length} recent traces with operation-le
 console.log(
   'Real PostgreSQL, MongoDB/Mongoose, Redis, RabbitMQ, HTTP, local-event, worker, and deterministic error flows passed.',
 );
-console.log('TypeScript instrumentation → Protobuf → Go collector → TypeScript topology passed.');
+const topologyAuthority = collectorHealth.topologyEngine === 'go' ? 'Go' : 'TypeScript rollback';
+console.log(
+  `TypeScript instrumentation → Protobuf → Go collector → ${topologyAuthority} topology passed.`,
+);
 
 async function post(path, body = {}) {
   const response = await fetch(`${apiUrl}${path}`, {

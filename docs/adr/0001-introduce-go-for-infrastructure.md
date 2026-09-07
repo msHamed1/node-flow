@@ -1,6 +1,6 @@
 # ADR 0001: Introduce Go for NodeFlow infrastructure components
 
-- Status: Accepted; delivery details amended by ADR 0002
+- Status: Accepted; delivery amended by ADR 0002/0003 and topology deferral superseded by ADR 0004
 - Date: 2026-09-03
 
 ## Context
