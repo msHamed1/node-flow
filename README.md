@@ -68,8 +68,8 @@ npx node-flow dev -- npm run start:dev
 
 Open [http://127.0.0.1:7331](http://127.0.0.1:7331), then use the application normally or send a
 request with `curl`. The graph is derived from the routes, controllers, providers, databases,
-caches, queues, and external services that actually execute. Telemetry stays in memory on your
-machine and is not uploaded.
+caches, queues, and external services that actually execute. Telemetry and the bounded local
+runtime state stay on your machine and are not uploaded.
 
 ## What NodeFlow helps you understand
 
@@ -99,10 +99,10 @@ The graph-first local dashboard includes:
 
 NodeFlow is designed for local development.
 
-- The collector binds to `127.0.0.1`.
+- The npm CLI launches the version-matched Go runtime and binds it to `127.0.0.1` by default.
 - Telemetry remains on the developer's machine.
-- Runtime data is stored only in memory.
-- Restarting NodeFlow clears the captured data.
+- The Go runtime persists its bounded WAL and topology checkpoint only in the local `.nodeflow`
+  directory, or on the configured container volume.
 - There are no accounts, API keys, analytics, cloud synchronization, or remote collectors.
 
 Do not expose the NodeFlow collector or dashboard to a public network.
@@ -122,16 +122,69 @@ developer's normal command. The preload initializes OpenTelemetry before applica
 loaded. OpenTelemetry instruments supported infrastructure clients, while NodeFlow adds semantic
 controller and provider boundaries and aggregates completed traces into a runtime map.
 
+### NodeFlow V2 Go collector
+
+V2.4 makes Go the default npm and container collector and topology authority without moving
+Node.js-specific instrumentation out of TypeScript:
+
+```mermaid
+flowchart LR
+    App[Node.js or NestJS application] --> TS[TypeScript instrumentation]
+    TS -->|nodeflow.v1 Protobuf| Go[Go collector]
+    Go -->|normalized bounded batches| Engine[Go topology engine]
+    Engine --> State[Durable topology checkpoint]
+    Engine --> API[Snapshot, runtime, and WebSocket API]
+    API --> Dashboard[React dashboard]
+```
+
+Go owns validation, bounded admission, batching, fixed worker concurrency, backpressure, graceful
+shutdown, collector metrics, topology reconstruction, durable topology state, snapshot/runtime-path
+APIs, WebSocket publication, and static dashboard hosting. TypeScript continues to own
+Node.js/OpenTelemetry integration, NestJS discovery, and the React dashboard. The TypeScript engine
+remains available for differential tests and `NODEFLOW_TOPOLOGY_ENGINE=typescript` emergency
+rollback. The npm CLI resolves an exact-version, platform-specific optional package, starts its Go
+binary, waits for the runtime readiness contract, and then launches the instrumented application.
+
+The rollback profile names the retained backend explicitly as `nodeflow-typescript-rollback`.
+`NODEFLOW_TOPOLOGY_ENGINE` is the authority selector; the legacy `NODEFLOW_SINK=http` value cannot
+switch a Go-authoritative process into rollback mode by itself.
+
+The preferred V2 wire format is Protocol Buffers, while the existing JSON ingestion endpoints stay
+available for compatibility. See [the V2 architecture](./docs/architecture-v2.md),
+[migration design](./docs/migrations/collector-go-v2.md), and
+[Go collector runbook](./runtime/go/README.md). The
+[npm runtime distribution contract](./docs/distribution/npm-go-runtime.md) documents supported
+platforms, package pairing, startup, and troubleshooting.
+
 ## Release and compatibility
 
-The current stable npm release is
-[`@mshamed1/node-flow@1.0.0`](https://www.npmjs.com/package/@mshamed1/node-flow). NodeFlow requires
+The current stable release is available from
+[`@mshamed1/node-flow` on npm](https://www.npmjs.com/package/@mshamed1/node-flow). NodeFlow requires
 Node.js 20 or newer. Its public package surface, transitive runtime packages, CLI binary, exports,
-bundled dashboard, package smoke tests, Changesets configuration, and npm trusted-publishing
-workflow use the `@mshamed1` npm scope, with `@mshamed1/node-flow` as the primary package.
+bundled dashboard, package smoke tests, Changesets configuration, and npm trusted-publishing workflow
+use the `@mshamed1` npm scope, with `@mshamed1/node-flow` as the primary package. The main package
+declares exact-version optional Go runtime packages; npm installs the package that matches the
+consumer's operating system and CPU.
 
 NodeFlow is licensed under Apache License 2.0. See [RELEASE.md](./RELEASE.md) for the one-time npm
 bootstrap and the automated release process.
+
+## Repository layout
+
+```text
+sdk/        Node.js and NestJS instrumentation
+runtime/    Go backend and platform npm binaries
+cli/        Published NodeFlow CLI
+dashboard/  React dashboard
+protocol/   Protobuf and TypeScript telemetry contract
+reference/  TypeScript rollback and semantic reference code
+tests/      Integration fixtures and compatibility tests
+examples/   Runnable NestJS example
+docs/       Architecture and design records
+scripts/    Build, verification, and release tooling
+```
+
+The folder layout describes source ownership; published npm package names remain unchanged.
 
 ## Install in a NestJS application
 
@@ -392,13 +445,14 @@ filename is `nodeflow.config.ts`.
 
 ## Environment variables
 
-| Environment variable     | Default                  | Purpose                                     |
-| ------------------------ | ------------------------ | ------------------------------------------- |
-| `NODEFLOW_PORT`          | `7331`                   | Collector and dashboard port                |
-| `NODEFLOW_HOST`          | `127.0.0.1`              | Collector bind host                         |
-| `NODEFLOW_COLLECTOR_URL` | `http://127.0.0.1:7331`  | Shared collector used by `node-flow run`    |
-| `NODEFLOW_SERVICE_NAME`  | Application package name | Name reported by the instrumented process   |
-| `NODEFLOW_DEBUG`         | Disabled                 | Set to `1` to log telemetry export failures |
+| Environment variable       | Default                  | Purpose                                     |
+| -------------------------- | ------------------------ | ------------------------------------------- |
+| `NODEFLOW_PORT`            | `7331`                   | Collector and dashboard port                |
+| `NODEFLOW_HOST`            | `127.0.0.1`              | Collector bind host                         |
+| `NODEFLOW_COLLECTOR_URL`   | `http://127.0.0.1:7331`  | Shared collector used by `node-flow run`    |
+| `NODEFLOW_SERVICE_NAME`    | Application package name | Name reported by the instrumented process   |
+| `NODEFLOW_DEBUG`           | Disabled                 | Set to `1` to log telemetry export failures |
+| `NODEFLOW_EXPORT_PROTOCOL` | `dev`: `protobuf`        | Override the instrumentation wire format    |
 
 Example:
 
@@ -492,8 +546,9 @@ topology is inserted directly. Controllers and services contain no tracing calls
 
 The Docker integration lab validates the package against actual infrastructure and the same public
 surface an external NestJS application uses. It starts PostgreSQL, MongoDB, Redis, RabbitMQ, a
-NestJS API, a NestJS queue worker, a local risk service, and one shared NodeFlow
-collector/dashboard.
+NestJS API, a NestJS queue worker, a local risk service, and the V2 Go collector/topology service.
+Instrumentation uses Protobuf through the Go boundary, and the TypeScript backend is not started in
+the default environment.
 
 Start the complete environment from the repository root:
 
@@ -505,6 +560,7 @@ This runs `docker compose up -d --build --wait`. When it completes, open:
 
 - API: [http://127.0.0.1:3000](http://127.0.0.1:3000)
 - NodeFlow dashboard: [http://127.0.0.1:7331](http://127.0.0.1:7331)
+- Go collector metrics: [http://127.0.0.1:4318/metrics](http://127.0.0.1:4318/metrics)
 - RabbitMQ management: [http://127.0.0.1:15672](http://127.0.0.1:15672)
 
 RabbitMQ uses the demo-only username and password `nodeflow`. All local defaults are documented in
@@ -552,12 +608,27 @@ Run the automated real-infrastructure assertions:
 
 ```bash
 yarn integration:test
+yarn integration:durability
 ```
 
 The test executes 100 PostgreSQL transactions and verifies they remain one architecture node. It
 also verifies every documented Mongoose and Redis operation, RabbitMQ producer and both consumer
 paths, outgoing HTTP, the cache miss/hit path, the local event listener, one correlated API-to-worker
 trace, and deterministic PostgreSQL, MongoDB, Redis, RabbitMQ, HTTP, business, and worker failures.
+The durability scenario verifies a graceful topology-state restart, interrupts Go topology
+checkpointing, admits telemetry to the segmented WAL, force-kills the process, and verifies restart
+replay and one canonical call. The contract remains at least once; bounded persisted span identity
+makes the controlled replay idempotent but is not an exactly-once guarantee.
+
+The compact topology compatibility corpus can be run without Docker:
+
+```bash
+yarn test:golden
+yarn test:topology-diff
+```
+
+The Go engine is the V2.4 runtime authority; these tests keep the retained TypeScript engine aligned
+as the rollback and semantic reference implementation.
 
 Focused fixtures are available at `POST /integration/postgres`, `/mongoose`, `/redis`, `/rabbitmq`,
 and `/http`; the application flow is also exposed as `POST /payments`, `GET /payments/:id`, and
@@ -649,7 +720,11 @@ NODEFLOW_DEBUG=1 npx node-flow dev -- npm run start:dev
   Changeset controls the next release.
 - One `NodeFlowModule` import remains required because NestJS has no public preload-to-container
   discovery hook.
-- State is process-local and cleared on restart.
+- Portable npm runtimes currently support macOS arm64/x64, Linux arm64/x64, and Windows x64. Other
+  targets fail with an explicit unsupported-platform message.
+- The TypeScript collector and `TopologyEngine` remain published for public compatibility,
+  differential testing, and the explicit Compose rollback profile; normal npm CLI operation no
+  longer installs or launches the TypeScript collector.
 - Automatic provider discovery covers singleton class providers created during bootstrap.
 - Request-scoped, transient, and dynamically created providers are intentionally skipped.
 - Inherited methods, instance arrow functions, accessors, lifecycle hooks, framework providers, and
@@ -672,8 +747,16 @@ yarn format:check
 yarn build
 yarn lint
 yarn test
+yarn test:golden
+yarn test:topology-diff
 yarn package:check
 yarn package:smoke
+yarn runtime:check:current
+yarn proto:check
+yarn go:build
+yarn go:vet
+yarn go:test
+yarn go:race
 yarn integration:up
 yarn integration:test
 yarn integration:down

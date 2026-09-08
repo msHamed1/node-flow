@@ -7,6 +7,8 @@ runtime instrumentation, collector, topology engine, dashboard, and NestJS demo.
 
 - Node.js 20 or newer
 - Yarn Classic 1.22.22
+- Go version declared by `runtime/go/go.mod`
+- Protobuf compiler 31.1 and `protoc-gen-go` 1.36.10 when regenerating the ingestion binding
 
 Enable the repository's declared Yarn version with Corepack when it is available:
 
@@ -35,24 +37,27 @@ yarn demo
 
 ## Repository layout
 
-| Path                              | Purpose                                                   | Published               |
-| --------------------------------- | --------------------------------------------------------- | ----------------------- |
-| `packages/cli`                    | Main `@mshamed1/node-flow` package and `node-flow` binary | Yes                     |
-| `packages/core`                   | Optional custom span and boundary APIs                    | Yes, runtime dependency |
-| `packages/instrumentation-node`   | Node.js preload and OpenTelemetry integration             | Yes, runtime dependency |
-| `packages/instrumentation-nestjs` | NestJS controller and provider integration                | Yes, runtime dependency |
-| `packages/protocol`               | Shared telemetry contracts                                | Yes, runtime dependency |
-| `packages/topology-engine`        | In-memory topology aggregation                            | Yes, runtime dependency |
-| `apps/collector`                  | Local collector and dashboard server                      | Yes, runtime dependency |
-| `apps/dashboard`                  | Dashboard source bundled into `@mshamed1/node-flow`       | No                      |
-| `apps/demo-nestjs`                | Local demonstration application                           | No                      |
-| `apps/integration-api`            | Real NestJS API integration fixture                       | No                      |
-| `apps/integration-worker`         | Real RabbitMQ consumer integration fixture                | No                      |
-| `apps/mock-risk-service`          | Local outgoing-HTTP integration fixture                   | No                      |
-| `packages/integration-contracts`  | Private API/worker event contracts                        | No                      |
+| Path                                  | Purpose                                                   | Published               |
+| ------------------------------------- | --------------------------------------------------------- | ----------------------- |
+| `cli`                                 | Main `@mshamed1/node-flow` package and `node-flow` binary | Yes                     |
+| `sdk/core`                            | Optional custom span and boundary APIs                    | Yes, runtime dependency |
+| `sdk/node`                            | Node.js preload and OpenTelemetry integration             | Yes, runtime dependency |
+| `sdk/nestjs`                          | NestJS controller and provider integration                | Yes, runtime dependency |
+| `protocol`                            | Protobuf schema, shared contracts, and TypeScript codec   | Yes, runtime dependency |
+| `runtime/go`                          | Go collector/topology source for npm binaries and images  | No                      |
+| `runtime/npm/*`                       | Five thin platform-specific Go binary packages            | Yes, optional runtime   |
+| `dashboard`                           | Dashboard source bundled into `@mshamed1/node-flow`       | No                      |
+| `reference/topology`                  | TypeScript semantic topology reference and snapshot tools | Yes, runtime dependency |
+| `reference/collector`                 | Retained TypeScript rollback/reference collector          | Yes, compatibility      |
+| `examples/nestjs`                     | Runnable local demonstration application                  | No                      |
+| `tests/integration/api`               | Real NestJS API integration fixture                       | No                      |
+| `tests/integration/worker`            | Real RabbitMQ consumer integration fixture                | No                      |
+| `tests/integration/mock-risk-service` | Local outgoing-HTTP integration fixture                   | No                      |
+| `tests/integration/contracts`         | Private API/worker event contracts                        | No                      |
 
-The internal packages are published because the main package imports them at runtime; TypeScript
-does not bundle those dependencies into `@mshamed1/node-flow`.
+The main package imports its TypeScript runtime dependencies and selects one exact-version optional
+Go runtime package. TypeScript does not bundle those dependencies into `@mshamed1/node-flow`. The
+retained TypeScript collector is no longer a normal dependency of the main CLI.
 
 ## Development checks
 
@@ -63,13 +68,22 @@ yarn format:check
 yarn build
 yarn lint
 yarn test
+yarn test:golden
+yarn test:topology-diff
 yarn package:check
 yarn package:smoke
+yarn runtime:check:current
+yarn proto:check
+yarn go:build
+yarn go:vet
+yarn go:test
+yarn go:race
 ```
 
 `package:check` inspects every `npm pack --dry-run` payload. `package:smoke` creates real tarballs,
 installs them into a clean temporary consumer, verifies public imports, and runs
-`node-flow --help`.
+`node-flow collector` and `node-flow dev` with the packed native runtime and dashboard. A failing
+`go` shim on `PATH` proves the clean consumer does not use a toolchain or repository build.
 
 Changes to runtime instrumentation, topology semantics, the CLI preload path, or integration
 fixtures should also run the real-infrastructure suite:
@@ -83,6 +97,15 @@ yarn integration:down
 The suite requires Docker Compose and uses only demo-local credentials from `.env.example`. The
 release workflow always runs it before Changesets can publish. Pull-request CI keeps the faster
 build, lint, unit, and package checks mandatory; Prettier remains informational in both workflows.
+
+The default Compose startup is Go-authoritative. Verify the retained TypeScript rollback explicitly
+when changing collector routing, topology APIs, or Compose wiring:
+
+```bash
+NODEFLOW_TOPOLOGY_ENGINE=typescript \
+  docker compose --profile typescript-rollback up -d --build --wait
+docker compose ps nodeflow-collector nodeflow-typescript-rollback
+```
 
 Apply formatting with:
 
@@ -105,8 +128,10 @@ Select all affected packages and use:
 - `minor` for backward-compatible features or meaningful new public capabilities.
 - `major` for breaking API, CLI, configuration, or runtime-behavior changes.
 
-The main package and its runtime dependencies are versioned independently. Include each package
-whose own public behavior changes; Changesets will update internal dependency ranges when required.
+Most packages are versioned independently. The main package and five platform Go runtime packages
+form a Changesets fixed group and must keep the same version; the main manifest must reference each
+runtime with that exact version. Include each other package whose public behavior changes;
+Changesets updates internal dependency ranges when required.
 
 A Changeset is normally unnecessary for documentation-only edits, tests that do not alter package
 behavior, formatting, or CI maintenance. If a pull request intentionally has no Changeset, explain

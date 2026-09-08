@@ -27,6 +27,21 @@ jobs:
           cache: yarn
           cache-dependency-path: yarn.lock
 
+      - name: Use Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: runtime/go/go.mod
+          cache-dependency-path: runtime/go/go.sum
+
+      - name: Use Protocol Buffers compiler
+        uses: arduino/setup-protoc@v3
+        with:
+          version: '31.1'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Go protocol generator
+        run: go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10
+
       - name: Use Yarn Classic
         run: |
           corepack enable
@@ -42,6 +57,21 @@ jobs:
       - name: Build
         run: yarn build
 
+      - name: Check generated protocol bindings
+        run: yarn proto:check
+
+      - name: Build Go collector
+        run: yarn go:build
+
+      - name: Vet Go collector
+        run: yarn go:vet
+
+      - name: Test Go collector
+        run: yarn go:test
+
+      - name: Race-test Go collector
+        run: yarn go:race
+
       - name: Check npm scope migration
         run: yarn scope:check
 
@@ -56,3 +86,61 @@ jobs:
 
       - name: Smoke-test packed packages
         run: yarn package:smoke
+
+  runtime-matrix:
+    name: Runtime ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x64
+            os: ubuntu-latest
+          - target: linux-arm64
+            os: ubuntu-24.04-arm
+          - target: darwin-arm64
+            os: macos-15
+          - target: darwin-x64
+            os: macos-15-intel
+          - target: win32-x64
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - name: Use Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: runtime/go/go.mod
+          cache-dependency-path: runtime/go/go.sum
+
+      - name: Use Yarn Classic
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build current platform runtime
+        run: yarn runtime:build:current
+
+      - name: Compile the launcher and its workspace dependencies
+        run: |
+          yarn workspace @mshamed1/node-flow-protocol build
+          yarn workspace @mshamed1/node-flow-topology-engine build
+          yarn workspace @mshamed1/node-flow-core build
+          yarn workspace @mshamed1/node-flow-instrumentation-nestjs build
+          yarn tsc -p cli/tsconfig.json
+
+      - name: Verify launcher, dynamic port, health, and shutdown
+        run: yarn runtime:smoke:launcher

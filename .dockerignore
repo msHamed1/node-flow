@@ -5,7 +5,8 @@ node_modules
 **/node_modules
 dist
 **/dist
-packages/cli/dashboard
+cli/dashboard
+runtime/npm/*/bin
 coverage
 *.tgz
 .env

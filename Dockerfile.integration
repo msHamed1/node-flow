@@ -4,13 +4,20 @@ WORKDIR /workspace
 
 RUN corepack enable && corepack prepare yarn@1.22.22 --activate
 
-COPY package.json yarn.lock tsconfig.base.json ./
-COPY packages ./packages
-COPY apps ./apps
+COPY package.json yarn.lock tsconfig.base.json .yarnrc ./
+COPY cli ./cli
+COPY dashboard ./dashboard
+COPY examples ./examples
+COPY protocol ./protocol
+COPY reference ./reference
+COPY runtime/npm ./runtime/npm
+COPY sdk ./sdk
+COPY tests ./tests
+COPY scripts/build-runtime-packages.mjs scripts/runtime-packages.mjs ./scripts/
 
 RUN yarn install --frozen-lockfile
-RUN yarn build
+RUN NODEFLOW_SKIP_RUNTIME_BUILD=1 yarn build
 
 ENV NODE_ENV=development
 
-CMD ["node", "packages/cli/dist/cli.js", "--help"]
+CMD ["node", "cli/dist/cli.js", "--help"]

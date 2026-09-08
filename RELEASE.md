@@ -1,6 +1,6 @@
 # Releasing NodeFlow
 
-This document is the canonical maintainer runbook for the seven public NodeFlow packages. The
+This document is the canonical maintainer runbook for the twelve public NodeFlow packages. The
 repository uses Yarn Classic for dependency management, Changesets for versions and changelogs, and
 the npm CLI for registry publication.
 
@@ -16,14 +16,21 @@ Packages are published in dependency order:
 4. `@mshamed1/node-flow-instrumentation-node`
 5. `@mshamed1/node-flow-instrumentation-nestjs`
 6. `@mshamed1/node-flow-collector`
-7. `@mshamed1/node-flow`
+7. `@mshamed1/node-flow-collector-darwin-arm64`
+8. `@mshamed1/node-flow-collector-darwin-x64`
+9. `@mshamed1/node-flow-collector-linux-arm64`
+10. `@mshamed1/node-flow-collector-linux-x64`
+11. `@mshamed1/node-flow-collector-win32-x64`
+12. `@mshamed1/node-flow`
 
 The dashboard and demo workspaces remain private. The dashboard build is shipped inside the main
-package under `dashboard/`.
+package under `dashboard/`. The five native packages contain only the platform-specific Go binary,
+README, license, and manifest. Their versions are fixed to the main package version, and the main
+package references each one with an exact optional dependency.
 
 ## License
 
-NodeFlow uses Apache License 2.0. The root and all seven public package directories carry the same
+NodeFlow uses Apache License 2.0. The root and all twelve public package directories carry the same
 license text, and every public package manifest declares the `Apache-2.0` SPDX identifier.
 
 When the license text or package structure changes, maintainers must confirm:
@@ -38,8 +45,9 @@ license metadata or files.
 
 ## One-time first publication
 
-This bootstrap has been completed for the current package set. Keep these steps only as a reference
-for adding a new public package or recovering a first-publication failure.
+This bootstrap has been completed for the original package set. The five platform runtime packages
+must follow these steps for their first release. Keep the remaining instructions as a reference for
+adding a public package or recovering a first-publication failure.
 
 npm trusted publishing cannot create a package that does not already exist on npm. The first
 version of each package must therefore be bootstrapped manually by an npm account allowed to create
@@ -75,7 +83,7 @@ yarn release:check
 Inspect the exact main package payload once more:
 
 ```bash
-cd packages/cli
+cd cli
 npm pack --dry-run
 cd ../..
 ```
@@ -101,6 +109,11 @@ npm publish --workspace @mshamed1/node-flow-core --access public
 npm publish --workspace @mshamed1/node-flow-instrumentation-node --access public
 npm publish --workspace @mshamed1/node-flow-instrumentation-nestjs --access public
 npm publish --workspace @mshamed1/node-flow-collector --access public
+npm publish --workspace @mshamed1/node-flow-collector-darwin-arm64 --access public
+npm publish --workspace @mshamed1/node-flow-collector-darwin-x64 --access public
+npm publish --workspace @mshamed1/node-flow-collector-linux-arm64 --access public
+npm publish --workspace @mshamed1/node-flow-collector-linux-x64 --access public
+npm publish --workspace @mshamed1/node-flow-collector-win32-x64 --access public
 npm publish --workspace @mshamed1/node-flow --access public
 ```
 
@@ -109,7 +122,7 @@ stop; do not publish packages that depend on the missing version.
 
 ### 4. Configure npm trusted publishers
 
-After all seven packages exist, configure a trusted publisher separately on each package's npm
+After all twelve packages exist, configure a trusted publisher separately on each package's npm
 settings page:
 
 - Provider: GitHub Actions
@@ -158,6 +171,8 @@ Repository settings must also allow GitHub Actions to create and approve pull re
    and failure assertions to pass before executing `yarn release`. Changesets publishes only
    unpublished versions using npm's GitHub OIDC identity.
 6. The Changesets action creates Git tags and GitHub Releases for successfully published versions.
+7. A main-package release tag triggers `collector-container-release.yml`, which refuses to overwrite
+   an existing version tag and publishes an attested `linux/amd64` plus `linux/arm64` image manifest.
 
 Do not manually edit versions or delete Changeset files to force a release.
 
@@ -169,7 +184,21 @@ For every released package:
 - Confirm the npm page displays provenance for the publication.
 - Confirm the Git tag and GitHub Release exist.
 - Install `@mshamed1/node-flow` in a new temporary NestJS application and run
-  `npx node-flow --help` before announcing the release.
+  `npx node-flow collector` and `npx node-flow dev -- <test-command>` before announcing the release.
+- Confirm `ghcr.io/mshamed1/node-flow-collector:<version>` exists, record its manifest digest, and
+  verify both image architectures.
+
+## Container rollback
+
+Container releases do not publish `latest`. Deployments should pin
+`ghcr.io/mshamed1/node-flow-collector@sha256:<manifest-digest>` and retain the last known-good digest.
+Before promoting a release, manually run `Verify collector container rollback` with the candidate
+digest as `current_image` and the last known-good digest as `previous_image`. The job reuses one
+volume and verifies that the previous image restores state written by the current image and accepts
+a new topology update.
+
+The first cross-version rollback test cannot run until two versioned multi-architecture images have
+been published. Record that as an explicit release limitation; do not substitute a mutable tag.
 
 ## Failed automated release
 

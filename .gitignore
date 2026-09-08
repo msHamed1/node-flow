@@ -1,8 +1,13 @@
 node_modules/
 dist/
-packages/cli/dashboard/
+cli/dashboard/
 .vite/
 coverage/
 *.tsbuildinfo
 .DS_Store
 yarn-error.log*
+.nodeflow/
+*.tgz
+node-flow.snapshot.json
+runtime/npm/*/bin/
+docs/
