@@ -95,8 +95,9 @@ present and that source files, tests, credentials, and unrelated repository file
 
 To retry the release through GitHub Actions, create a short-lived granular npm token with **Packages
 and scopes: Read and write** access to the `@mshamed1` scope. Organization permission alone does not
-grant package publishing access. Enable **Bypass 2FA** only if the scope's publishing policy requires
-it for non-interactive CI. Store the token as the repository secret `NPM_BOOTSTRAP_TOKEN`, rerun the
+grant package publishing access. Enable **Bypass 2FA** because npm requires either an interactive OTP
+or a bypass-enabled granular token when creating a package, and GitHub Actions cannot complete the
+interactive challenge. Store the token as the repository secret `NPM_BOOTSTRAP_TOKEN`, rerun the
 release for the exact release commit, and delete the secret immediately after every new package
 exists. The workflow exposes the same secret as both `NPM_TOKEN` for the Changesets action and
 `NODE_AUTH_TOKEN` for the npm configuration created by `actions/setup-node`.
