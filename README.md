@@ -71,6 +71,39 @@ request with `curl`. The graph is derived from the routes, controllers, provider
 caches, queues, and external services that actually execute. Telemetry and the bounded local
 runtime state stay on your machine and are not uploaded.
 
+### Supported platforms and automatic runtime selection
+
+Install only `@mshamed1/node-flow`. The platform-specific collector packages are distribution
+implementation details and should not be added to an application directly.
+
+The main package declares each native collector as an exact-version optional dependency. During
+installation, npm compares the `os` and `cpu` metadata in those packages with the host system and
+installs the compatible runtime:
+
+| Host system               | Runtime package                                         |
+| ------------------------- | ------------------------------------------------------- |
+| macOS on Apple Silicon    | `@mshamed1/node-flow-collector-darwin-arm64`            |
+| macOS on Intel            | `@mshamed1/node-flow-collector-darwin-x64`              |
+| Linux on ARM64            | `@mshamed1/node-flow-collector-linux-arm64`             |
+| Linux on x64              | `@mshamed1/node-flow-collector-linux-x64`               |
+| Windows on x64            | `@mshamed1/node-flow-collector-win32-x64`               |
+
+At startup, the CLI reads Node.js `process.platform` and `process.arch`, resolves the corresponding
+package, verifies that its version and runtime protocol match the CLI, and starts the packaged Go
+binary. You can inspect the exact target reported by your Node.js installation with:
+
+```bash
+node -p "process.platform + '-' + process.arch"
+```
+
+The detected architecture belongs to the running Node.js executable. For example, an Apple
+Silicon Mac running an x64 Node.js build through Rosetta selects `darwin-x64`; a native ARM64
+Node.js build selects `darwin-arm64`.
+
+Do not install NodeFlow with optional dependencies disabled. If the matching runtime is missing,
+reinstall the main package with optional dependencies enabled. Hosts outside the table are not
+currently supported by the portable CLI and receive an explicit unsupported-platform error.
+
 ## What NodeFlow helps you understand
 
 NodeFlow gives developers a visual answer to questions such as:

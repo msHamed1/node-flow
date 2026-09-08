@@ -14,6 +14,31 @@ Node.js 20 or newer is required.
 npm install --save-dev @mshamed1/node-flow
 ```
 
+Install the main package only. Its exact-version optional dependencies provide the native runtime
+for each supported operating system and CPU combination:
+
+| Host system               | Runtime selected automatically                          |
+| ------------------------- | ------------------------------------------------------- |
+| macOS on Apple Silicon    | `@mshamed1/node-flow-collector-darwin-arm64`            |
+| macOS on Intel            | `@mshamed1/node-flow-collector-darwin-x64`              |
+| Linux on ARM64            | `@mshamed1/node-flow-collector-linux-arm64`             |
+| Linux on x64              | `@mshamed1/node-flow-collector-linux-x64`               |
+| Windows on x64            | `@mshamed1/node-flow-collector-win32-x64`               |
+
+npm uses each runtime package's `os` and `cpu` metadata during installation. When NodeFlow starts,
+the CLI selects the installed package using Node.js `process.platform` and `process.arch`, then
+validates its platform metadata, protocol version, and exact version before executing the binary.
+
+Check the target detected by the current Node.js executable with:
+
+```bash
+node -p "process.platform + '-' + process.arch"
+```
+
+On Apple Silicon, an x64 Node.js build running through Rosetta selects `darwin-x64`; native ARM64
+Node.js selects `darwin-arm64`. Do not disable optional dependencies or install a collector package
+directly. Unsupported systems receive an explicit error from the CLI.
+
 ## Start NodeFlow
 
 Run the application through NodeFlow using the development command you already use:
