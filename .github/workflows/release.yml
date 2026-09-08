@@ -40,10 +40,10 @@ jobs:
           cache-dependency-path: runtime/go/go.sum
 
       - name: Use Protocol Buffers compiler
-        uses: arduino/setup-protoc@v3
+        uses: ./.github/actions/setup-protoc
         with:
           version: '31.1'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          sha256: 96553041f1a91ea0efee963cb16f462f5985b4d65365f3907414c360044d8065
 
       - name: Install Go protocol generator
         run: go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10
@@ -119,7 +119,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create version pull request or publish with npm trusted publishing
+      - name: Create version pull request or publish packages
         if: vars.NPM_TRUSTED_PUBLISHING_ENABLED == 'true'
         uses: changesets/action@v1
         with:
@@ -130,3 +130,6 @@ jobs:
           createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Leave this secret unset after first publication so npm uses trusted publishing again.
+          NPM_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}

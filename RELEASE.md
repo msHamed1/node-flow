@@ -49,9 +49,9 @@ This bootstrap has been completed for the original package set. The five platfor
 must follow these steps for their first release. Keep the remaining instructions as a reference for
 adding a public package or recovering a first-publication failure.
 
-npm trusted publishing cannot create a package that does not already exist on npm. The first
-version of each package must therefore be bootstrapped manually by an npm account allowed to create
-packages in the `@mshamed1` organization.
+npm trusted publishing cannot be configured until a package exists on npm. The first version of
+each package must therefore be bootstrapped with a short-lived granular token or an interactive npm
+login belonging to an account allowed to create packages in the `@mshamed1` scope.
 
 ### 1. Confirm ownership and repository identity
 
@@ -91,9 +91,18 @@ cd ../..
 Verify that the CLI, declarations, public entry points, package README, and dashboard assets are
 present and that source files, tests, credentials, and unrelated repository files are absent.
 
-### 3. Bootstrap version 0.1.0 manually
+### 3. Bootstrap the first version
 
-Authenticate interactively; never store the token in the repository or a GitHub secret:
+To retry the release through GitHub Actions, create a short-lived granular npm token with **Packages
+and scopes: Read and write** access to the `@mshamed1` scope. Organization permission alone does not
+grant package publishing access. Enable **Bypass 2FA** only if the scope's publishing policy requires
+it for non-interactive CI. Store the token as the repository secret `NPM_BOOTSTRAP_TOKEN`, rerun the
+release for the exact release commit, and delete the secret immediately after every new package
+exists. The workflow exposes the same secret as both `NPM_TOKEN` for the Changesets action and
+`NODE_AUTH_TOKEN` for the npm configuration created by `actions/setup-node`.
+
+Alternatively, bootstrap from the same release commit interactively. Never store an interactive
+login token in the repository:
 
 ```bash
 npm login
@@ -138,8 +147,9 @@ package. Keep the workflow on a GitHub-hosted runner.
 
 The release job uses Node.js 24, the latest npm 11 release, disables release dependency caching,
 and grants the required `id-token: write` permission. Trusted publishing requires npm 11.5.1 or
-newer, while the `npm trust` management command currently requires npm 11.15 or newer. The workflow
-does not use `NPM_TOKEN`; npm generates provenance automatically for trusted publications.
+newer, while the `npm trust` management command currently requires npm 11.15 or newer. During normal
+releases `NPM_BOOTSTRAP_TOKEN` remains unset, so Changesets uses npm trusted publishing and npm
+generates provenance automatically.
 
 After trusted publishing succeeds, set each package's npm publishing access to require two-factor
 authentication and disallow token-based publishing.
