@@ -1,6 +1,6 @@
 {
   "name": "@mshamed1/node-flow-topology-engine",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "TypeScript semantic reference engine and snapshot utilities for NodeFlow.",
   "license": "Apache-2.0",
   "type": "module",
@@ -33,6 +33,6 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@mshamed1/node-flow-protocol": "1.1.0"
+    "@mshamed1/node-flow-protocol": "1.2.0"
   }
 }

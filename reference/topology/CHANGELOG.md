@@ -1,5 +1,12 @@
 # @mshamed1/node-flow-topology-engine
 
+## 1.1.1
+
+### Patch Changes
+
+- Updated dependencies [[`33755c5`](https://github.com/msHamed1/node-flow/commit/33755c5f1e89db91aa4c4e4bd676975d43368449)]:
+  - @mshamed1/node-flow-protocol@1.2.0
+
 ## 1.1.0
 
 ### Minor Changes

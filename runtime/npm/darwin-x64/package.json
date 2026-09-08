@@ -1,6 +1,6 @@
 {
   "name": "@mshamed1/node-flow-collector-darwin-x64",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "NodeFlow Go collector runtime for macOS on Intel.",
   "license": "Apache-2.0",
   "os": [
