@@ -7,7 +7,7 @@ runtime instrumentation, collector, topology engine, dashboard, and NestJS demo.
 
 - Node.js 20 or newer
 - Yarn Classic 1.22.22
-- Go version declared by `services/collector/go.mod`
+- Go version declared by `runtime/go/go.mod`
 - Protobuf compiler 31.1 and `protoc-gen-go` 1.36.10 when regenerating the ingestion binding
 
 Enable the repository's declared Yarn version with Corepack when it is available:
@@ -37,24 +37,23 @@ yarn demo
 
 ## Repository layout
 
-| Path                              | Purpose                                                   | Published               |
-| --------------------------------- | --------------------------------------------------------- | ----------------------- |
-| `packages/cli`                    | Main `@mshamed1/node-flow` package and `node-flow` binary | Yes                     |
-| `packages/core`                   | Optional custom span and boundary APIs                    | Yes, runtime dependency |
-| `packages/instrumentation-node`   | Node.js preload and OpenTelemetry integration             | Yes, runtime dependency |
-| `packages/instrumentation-nestjs` | NestJS controller and provider integration                | Yes, runtime dependency |
-| `packages/protocol`               | Shared contracts and TypeScript telemetry codec           | Yes, runtime dependency |
-| `packages/topology-engine`        | TypeScript CLI/rollback/reference topology engine         | Yes, runtime dependency |
-| `apps/collector`                  | Retained TypeScript rollback/reference collector          | Yes, compatibility      |
-| `packages/collector-*`            | Five platform-specific Go runtime binary packages         | Yes, optional runtime   |
-| `apps/dashboard`                  | Dashboard source bundled into `@mshamed1/node-flow`       | No                      |
-| `apps/demo-nestjs`                | Local demonstration application                           | No                      |
-| `apps/integration-api`            | Real NestJS API integration fixture                       | No                      |
-| `apps/integration-worker`         | Real RabbitMQ consumer integration fixture                | No                      |
-| `apps/mock-risk-service`          | Local outgoing-HTTP integration fixture                   | No                      |
-| `packages/integration-contracts`  | Private API/worker event contracts                        | No                      |
-| `proto/nodeflow/v1`               | Active language-neutral telemetry ingestion schema        | No                      |
-| `services/collector`              | Go collector/topology source for npm binaries and images  | No                      |
+| Path                                  | Purpose                                                   | Published               |
+| ------------------------------------- | --------------------------------------------------------- | ----------------------- |
+| `cli`                                 | Main `@mshamed1/node-flow` package and `node-flow` binary | Yes                     |
+| `sdk/core`                            | Optional custom span and boundary APIs                    | Yes, runtime dependency |
+| `sdk/node`                            | Node.js preload and OpenTelemetry integration             | Yes, runtime dependency |
+| `sdk/nestjs`                          | NestJS controller and provider integration                | Yes, runtime dependency |
+| `protocol`                            | Protobuf schema, shared contracts, and TypeScript codec   | Yes, runtime dependency |
+| `runtime/go`                          | Go collector/topology source for npm binaries and images  | No                      |
+| `runtime/npm/*`                       | Five thin platform-specific Go binary packages            | Yes, optional runtime   |
+| `dashboard`                           | Dashboard source bundled into `@mshamed1/node-flow`       | No                      |
+| `reference/topology`                  | TypeScript semantic topology reference and snapshot tools | Yes, runtime dependency |
+| `reference/collector`                 | Retained TypeScript rollback/reference collector          | Yes, compatibility      |
+| `examples/nestjs`                     | Runnable local demonstration application                  | No                      |
+| `tests/integration/api`               | Real NestJS API integration fixture                       | No                      |
+| `tests/integration/worker`            | Real RabbitMQ consumer integration fixture                | No                      |
+| `tests/integration/mock-risk-service` | Local outgoing-HTTP integration fixture                   | No                      |
+| `tests/integration/contracts`         | Private API/worker event contracts                        | No                      |
 
 The main package imports its TypeScript runtime dependencies and selects one exact-version optional
 Go runtime package. TypeScript does not bundle those dependencies into `@mshamed1/node-flow`. The

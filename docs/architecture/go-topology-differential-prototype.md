@@ -6,11 +6,11 @@
 ## Status and boundary
 
 The Go topology implementation is an experimental V2.3 package at
-`services/collector/internal/topology`. It is not imported by the collector pipeline, HTTP server,
+`runtime/go/internal/topology`. It is not imported by the collector pipeline, HTTP server,
 compatibility sink, TypeScript collector, dashboard, or snapshot APIs. The production TypeScript
 `TopologyEngine` remains the semantic source of truth and the only engine serving topology.
 
-The command under `services/collector/cmd/topology-diff` is a test adapter. It accepts the same
+The command under `runtime/go/cmd/topology-diff` is a test adapter. It accepts the same
 JSON-serializable telemetry batches as the TypeScript golden tests and returns a Go-derived
 `NodeFlowSnapshot`. It is not a production service.
 

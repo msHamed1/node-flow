@@ -9,7 +9,7 @@ if (process.env.NODEFLOW_SKIP_RUNTIME_BUILD === '1') {
   console.log('Skipped Go runtime packages for this TypeScript-only image build.');
   process.exit(0);
 }
-const cliManifest = readManifest('packages/cli/package.json');
+const cliManifest = readManifest('cli/package.json');
 const clean = process.argv.includes('--clean');
 const validateOnly = process.argv.includes('--validate-only');
 const current = process.argv.includes('--current');
@@ -53,7 +53,7 @@ for (const target of targets) {
       './cmd/nodeflow-collector',
     ],
     {
-      cwd: resolve(root, 'services/collector'),
+      cwd: resolve(root, 'runtime/go'),
       encoding: 'utf8',
       env: {
         ...process.env,

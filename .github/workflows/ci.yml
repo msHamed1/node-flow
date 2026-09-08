@@ -30,8 +30,8 @@ jobs:
       - name: Use Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: services/collector/go.mod
-          cache-dependency-path: services/collector/go.sum
+          go-version-file: runtime/go/go.mod
+          cache-dependency-path: runtime/go/go.sum
 
       - name: Use Protocol Buffers compiler
         uses: arduino/setup-protoc@v3
@@ -120,8 +120,8 @@ jobs:
       - name: Use Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: services/collector/go.mod
-          cache-dependency-path: services/collector/go.sum
+          go-version-file: runtime/go/go.mod
+          cache-dependency-path: runtime/go/go.sum
 
       - name: Use Yarn Classic
         run: |
@@ -140,7 +140,7 @@ jobs:
           yarn workspace @mshamed1/node-flow-topology-engine build
           yarn workspace @mshamed1/node-flow-core build
           yarn workspace @mshamed1/node-flow-instrumentation-nestjs build
-          yarn tsc -p packages/cli/tsconfig.json
+          yarn tsc -p cli/tsconfig.json
 
       - name: Verify launcher, dynamic port, health, and shutdown
         run: yarn runtime:smoke:launcher

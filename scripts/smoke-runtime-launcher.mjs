@@ -1,7 +1,7 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startGoRuntime } from '../packages/cli/dist/runtime-launcher.js';
+import { startGoRuntime } from '../cli/dist/runtime-launcher.js';
 
 const fixture = mkdtempSync(join(tmpdir(), 'nodeflow-launcher-smoke-'));
 const dashboard = join(fixture, 'dashboard');

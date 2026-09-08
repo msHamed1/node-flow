@@ -79,7 +79,7 @@ services:
   nodeflow-typescript-rollback:
     <<: *nodeflow-runtime
     profiles: ['typescript-rollback']
-    command: ['node', 'apps/collector/dist/rollback.js']
+    command: ['node', 'reference/collector/dist/rollback.js']
     environment:
       NODEFLOW_HOST: 0.0.0.0
       NODEFLOW_PORT: 7331
@@ -136,11 +136,11 @@ services:
     command:
       [
         'node',
-        'packages/cli/dist/cli.js',
+        'cli/dist/cli.js',
         'run',
         '--',
         'node',
-        'apps/mock-risk-service/dist/main.js',
+        'tests/integration/mock-risk-service/dist/main.js',
       ]
     environment:
       NODEFLOW_COLLECTOR_URL: http://nodeflow-collector:4318
@@ -167,14 +167,7 @@ services:
   integration-worker:
     <<: *nodeflow-runtime
     command:
-      [
-        'node',
-        'packages/cli/dist/cli.js',
-        'run',
-        '--',
-        'node',
-        'apps/integration-worker/dist/main.js',
-      ]
+      ['node', 'cli/dist/cli.js', 'run', '--', 'node', 'tests/integration/worker/dist/main.js']
     environment:
       <<: *nodeflow-environment
       NODEFLOW_SERVICE_NAME: integration-worker
@@ -202,8 +195,7 @@ services:
 
   integration-api:
     <<: *nodeflow-runtime
-    command:
-      ['node', 'packages/cli/dist/cli.js', 'run', '--', 'node', 'apps/integration-api/dist/main.js']
+    command: ['node', 'cli/dist/cli.js', 'run', '--', 'node', 'tests/integration/api/dist/main.js']
     environment:
       <<: *nodeflow-environment
       NODEFLOW_SERVICE_NAME: integration-api

@@ -73,7 +73,7 @@ dual-write.
 | Node.js and OpenTelemetry integration                      | TypeScript instrumentation                 |
 | NestJS controllers and singleton providers                 | TypeScript NestJS package                  |
 | Span normalization and first redaction boundary            | TypeScript instrumentation                 |
-| Versioned wire format                                      | `proto/nodeflow/v1` plus protocol bindings |
+| Versioned wire format                                      | `protocol/proto/nodeflow/v1` plus protocol bindings |
 | Network admission, durable spool, retry, batching, workers | Go collector                               |
 | Second validation/redaction boundary                       | Go collector                               |
 | Stable node IDs, dependency reconstruction, runtime paths  | Go topology engine                         |

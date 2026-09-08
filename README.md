@@ -152,7 +152,7 @@ switch a Go-authoritative process into rollback mode by itself.
 The preferred V2 wire format is Protocol Buffers, while the existing JSON ingestion endpoints stay
 available for compatibility. See [the V2 architecture](./docs/architecture-v2.md),
 [migration design](./docs/migrations/collector-go-v2.md), and
-[Go collector runbook](./services/collector/README.md). The
+[Go collector runbook](./runtime/go/README.md). The
 [npm runtime distribution contract](./docs/distribution/npm-go-runtime.md) documents supported
 platforms, package pairing, startup, and troubleshooting.
 
@@ -168,6 +168,23 @@ consumer's operating system and CPU.
 
 NodeFlow is licensed under Apache License 2.0. See [RELEASE.md](./RELEASE.md) for the one-time npm
 bootstrap and the automated release process.
+
+## Repository layout
+
+```text
+sdk/        Node.js and NestJS instrumentation
+runtime/    Go backend and platform npm binaries
+cli/        Published NodeFlow CLI
+dashboard/  React dashboard
+protocol/   Protobuf and TypeScript telemetry contract
+reference/  TypeScript rollback and semantic reference code
+tests/      Integration fixtures and compatibility tests
+examples/   Runnable NestJS example
+docs/       Architecture and design records
+scripts/    Build, verification, and release tooling
+```
+
+The folder layout describes source ownership; published npm package names remain unchanged.
 
 ## Install in a NestJS application
 

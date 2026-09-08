@@ -36,8 +36,8 @@ jobs:
       - name: Use Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: services/collector/go.mod
-          cache-dependency-path: services/collector/go.sum
+          go-version-file: runtime/go/go.mod
+          cache-dependency-path: runtime/go/go.sum
 
       - name: Use Protocol Buffers compiler
         uses: arduino/setup-protoc@v3

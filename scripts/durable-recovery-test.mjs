@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import assert from 'node:assert/strict';
-import { encodeTelemetryEnvelope } from '../packages/protocol/dist/index.js';
+import { encodeTelemetryEnvelope } from '../protocol/dist/index.js';
 
 const collectorUrl = process.env.NODEFLOW_INTEGRATION_COLLECTOR_URL ?? 'http://127.0.0.1:7331';
 const goCollectorUrl = process.env.NODEFLOW_INTEGRATION_GO_COLLECTOR_URL ?? 'http://127.0.0.1:4318';

@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -6,11 +6,17 @@ import { fileURLToPath } from 'node:url';
 const script = process.argv[2];
 if (!script) throw new Error('workspace script name is required');
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const manifests = ['apps', 'packages'].flatMap((group) =>
-  readdirSync(resolve(root, group), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => resolve(root, group, entry.name, 'package.json')),
-);
+const workspaceRoots = [
+  'cli',
+  'dashboard',
+  'examples',
+  'protocol',
+  'reference',
+  'runtime/npm',
+  'sdk',
+  'tests/integration',
+];
+const manifests = workspaceRoots.flatMap(manifestsUnder);
 
 for (const manifestPath of manifests) {
   let manifest;
@@ -27,4 +33,14 @@ for (const manifestPath of manifests) {
     stdio: 'inherit',
   });
   if (result.status !== 0) process.exit(result.status ?? 1);
+}
+
+function manifestsUnder(relativeDirectory) {
+  const directory = resolve(root, relativeDirectory);
+  const directManifest = resolve(directory, 'package.json');
+  if (existsSync(directManifest)) return [directManifest];
+  return readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => resolve(directory, entry.name, 'package.json'))
+    .filter(existsSync);
 }

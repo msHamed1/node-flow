@@ -1,0 +1,41 @@
+{
+  "name": "@mshamed1/node-flow-collector-linux-arm64",
+  "version": "1.1.1",
+  "description": "NodeFlow Go collector runtime for Linux on ARM64.",
+  "license": "Apache-2.0",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "files": [
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "nodeflowRuntime": {
+    "protocolVersion": 1,
+    "binary": "bin/nodeflow-collector"
+  },
+  "scripts": {
+    "build": "node ../../../scripts/build-runtime-packages.mjs --target linux-arm64",
+    "lint": "node ../../../scripts/build-runtime-packages.mjs --target linux-arm64 --validate-only",
+    "clean": "node ../../../scripts/build-runtime-packages.mjs --target linux-arm64 --clean"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/msHamed1/node-flow.git",
+    "directory": "runtime/npm/linux-arm64"
+  },
+  "homepage": "https://github.com/msHamed1/node-flow#readme",
+  "bugs": {
+    "url": "https://github.com/msHamed1/node-flow/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

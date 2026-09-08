@@ -14,7 +14,7 @@ fi
 
 cd "$repository_root"
 protoc \
-  --proto_path=proto \
-  --go_out=services/collector \
-  --go_opt=module=github.com/msHamed1/node-flow/services/collector \
-  proto/nodeflow/v1/telemetry.proto
+  --proto_path=protocol/proto \
+  --go_out=runtime/go \
+  --go_opt=module=github.com/msHamed1/node-flow/runtime/go \
+  nodeflow/v1/telemetry.proto

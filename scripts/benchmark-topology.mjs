@@ -3,7 +3,7 @@ import { cpus, platform, release, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
-import { TopologyEngine } from '../packages/topology-engine/dist/index.js';
+import { TopologyEngine } from '../reference/topology/dist/index.js';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const snapshotIterations = 1_000;
@@ -89,7 +89,7 @@ function runTypeScript(candidate) {
 
 function runGo(candidates) {
   const execution = spawnSync('go', ['run', './cmd/topology-benchmark'], {
-    cwd: join(repositoryRoot, 'services/collector'),
+    cwd: join(repositoryRoot, 'runtime/go'),
     encoding: 'utf8',
     input: JSON.stringify({ snapshotIterations, workloads: candidates }),
     env: {

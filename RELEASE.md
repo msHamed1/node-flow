@@ -83,7 +83,7 @@ yarn release:check
 Inspect the exact main package payload once more:
 
 ```bash
-cd packages/cli
+cd cli
 npm pack --dry-run
 cd ../..
 ```

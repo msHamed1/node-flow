@@ -1,6 +1,6 @@
 node_modules/
 dist/
-packages/cli/dashboard/
+cli/dashboard/
 .vite/
 coverage/
 *.tsbuildinfo
@@ -9,5 +9,5 @@ yarn-error.log*
 .nodeflow/
 *.tgz
 node-flow.snapshot.json
-packages/collector-*/bin/
+runtime/npm/*/bin/
 docs/

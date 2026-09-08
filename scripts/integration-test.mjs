@@ -282,8 +282,8 @@ function assertOperations(spans, expectations) {
 
 async function assertAutomaticInstrumentationSources() {
   for (const sourcePath of [
-    'apps/integration-api/src/integration.service.ts',
-    'apps/integration-worker/src/payment.worker.ts',
+    'tests/integration/api/src/integration.service.ts',
+    'tests/integration/worker/src/payment.worker.ts',
   ]) {
     const source = await readFile(sourcePath, 'utf8');
     for (const forbidden of ['traceBoundary(', 'nodeflow.span(', '/src/']) {

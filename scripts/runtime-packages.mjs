@@ -22,7 +22,7 @@ function runtime(platform, architecture) {
     target,
     goos: platform === 'win32' ? 'windows' : platform,
     goarch: architecture === 'x64' ? 'amd64' : architecture,
-    directory: `packages/collector-${target}`,
+    directory: `runtime/npm/${target}`,
     packageName: `@mshamed1/node-flow-collector-${target}`,
     binaryName: platform === 'win32' ? 'nodeflow-collector.exe' : 'nodeflow-collector',
   };

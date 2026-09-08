@@ -2,7 +2,7 @@
 
 The Go topology engine is NodeFlow's V2.4 npm and container runtime authority. The retained
 TypeScript `TopologyEngine` is the rollback and semantic reference implementation. The golden corpus
-under `packages/topology-engine/test` converts deterministic telemetry batches into
+under `reference/topology/test` converts deterministic telemetry batches into
 `nodeflow.topology-golden.v1`, a compact JSON-serializable representation used by the
 TypeScript-versus-Go differential tests. The fixture source uses TypeScript only for schema checking;
 inputs and expected values contain no functions, dates, maps, or TypeScript-only values.
@@ -56,6 +56,6 @@ cross-language comparisons without expanding the checked-in corpus into unstable
 Run it with:
 
 ```bash
-yarn vitest run packages/topology-engine/test/golden-corpus.test.ts
+yarn vitest run reference/topology/test/golden-corpus.test.ts
 yarn test:topology-diff
 ```
