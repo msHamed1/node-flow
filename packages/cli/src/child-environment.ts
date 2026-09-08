@@ -9,6 +9,7 @@ const registerUrl = pathToFileURL(
 export function createInstrumentedEnvironment(
   environment: NodeJS.ProcessEnv,
   collectorUrl: string,
+  options: { exportProtocol?: 'json' | 'protobuf'; runtimePid?: number } = {},
 ): NodeJS.ProcessEnv {
   const preloadOption = `--import=${registerUrl}`;
   const existingOptions = environment.NODE_OPTIONS?.trim();
@@ -20,6 +21,8 @@ export function createInstrumentedEnvironment(
     ...environment,
     NODE_OPTIONS: nodeOptions,
     NODEFLOW_COLLECTOR_URL: collectorUrl,
+    ...(options.exportProtocol ? { NODEFLOW_EXPORT_PROTOCOL: options.exportProtocol } : {}),
+    ...(options.runtimePid ? { NODEFLOW_RUNTIME_PID: String(options.runtimePid) } : {}),
   };
 }
 

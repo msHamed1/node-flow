@@ -9,4 +9,5 @@ yarn-error.log*
 .nodeflow/
 *.tgz
 node-flow.snapshot.json
+packages/collector-*/bin/
 docs/

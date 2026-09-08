@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const retiredScope = ['@node', '-flow'].join('');
 const retiredScopeBytes = Buffer.from(retiredScope);
-const ignoredDirectories = new Set(['.git', 'node_modules']);
+const ignoredDirectories = new Set(['.git', 'bin', 'node_modules']);
 const matches = [];
 
 const scan = (directory) => {

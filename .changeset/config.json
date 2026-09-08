@@ -6,7 +6,16 @@
     }
   ],
   "commit": false,
-  "fixed": [],
+  "fixed": [
+    [
+      "@mshamed1/node-flow",
+      "@mshamed1/node-flow-collector-darwin-arm64",
+      "@mshamed1/node-flow-collector-darwin-x64",
+      "@mshamed1/node-flow-collector-linux-arm64",
+      "@mshamed1/node-flow-collector-linux-x64",
+      "@mshamed1/node-flow-collector-win32-x64"
+    ]
+  ],
   "linked": [],
   "access": "public",
   "baseBranch": "main",

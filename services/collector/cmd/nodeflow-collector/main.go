@@ -2,11 +2,16 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -23,7 +28,30 @@ var version = "dev"
 
 const publicAPIVersion = "0.1.0"
 
+const startupProtocolVersion = 1
+
+type runtimeReadyEvent struct {
+	Type            string `json:"type"`
+	ProtocolVersion int    `json:"protocolVersion"`
+	Address         string `json:"address"`
+	URL             string `json:"url"`
+	RuntimeVersion  string `json:"runtimeVersion"`
+	PID             int    `json:"pid"`
+}
+
 func main() {
+	if len(os.Args) == 2 && (os.Args[1] == "--version" || os.Args[1] == "version") {
+		fmt.Println(version)
+		return
+	}
+	if len(os.Args) > 1 {
+		fatal("invalid collector command", fmt.Errorf("unexpected arguments: %s", strings.Join(os.Args[1:], " ")))
+	}
+	startupProtocol := strings.TrimSpace(os.Getenv("NODEFLOW_STARTUP_PROTOCOL"))
+	if startupProtocol != "" && startupProtocol != "json-v1" {
+		fatal("invalid collector startup protocol", fmt.Errorf("NODEFLOW_STARTUP_PROTOCOL must be json-v1"))
+	}
+
 	config, err := config.Load()
 	if err != nil {
 		fatal("invalid collector configuration", err)
@@ -122,16 +150,35 @@ func main() {
 	}
 	api := collectorserver.New(processor, metrics, logger, config.MaxBodyBytes, publicAPIVersion, serverOptions...)
 	server := api.HTTPServer(config.ListenAddress)
+	listener, err := net.Listen("tcp", config.ListenAddress)
+	if err != nil {
+		fatal("start collector HTTP listener", err)
+	}
+	actualAddress := listener.Addr().String()
+	actualURL, err := runtimeURL(listener.Addr())
+	if err != nil {
+		_ = listener.Close()
+		fatal("resolve collector HTTP URL", err)
+	}
 
 	serverErrors := make(chan error, 1)
 	go func() {
 		logger.Info("NodeFlow Go collector started",
-			"address", config.ListenAddress, "workers", config.Workers, "queue_size", config.QueueSize,
+			"address", actualAddress, "workers", config.Workers, "queue_size", config.QueueSize,
 			"batch_size", config.BatchSize, "flush_interval", config.FlushInterval.String(),
 			"sink", config.Sink, "topology_engine", config.TopologyEngine, "spool_mode", config.SpoolMode,
 			"binary_version", version)
-		serverErrors <- server.ListenAndServe()
+		serverErrors <- server.Serve(listener)
 	}()
+	if startupProtocol == "json-v1" {
+		if err := json.NewEncoder(os.Stdout).Encode(runtimeReadyEvent{
+			Type: "nodeflow.runtime.ready", ProtocolVersion: startupProtocolVersion,
+			Address: actualAddress, URL: actualURL, RuntimeVersion: version, PID: os.Getpid(),
+		}); err != nil {
+			_ = listener.Close()
+			fatal("write collector startup event", err)
+		}
+	}
 
 	signalContext, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stopSignals()
@@ -163,6 +210,20 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info("NodeFlow Go collector stopped")
+}
+
+func runtimeURL(address net.Addr) (string, error) {
+	host, port, err := net.SplitHostPort(address.String())
+	if err != nil {
+		return "", err
+	}
+	switch host {
+	case "", "0.0.0.0":
+		host = "127.0.0.1"
+	case "::":
+		host = "::1"
+	}
+	return (&url.URL{Scheme: "http", Host: net.JoinHostPort(host, port)}).String(), nil
 }
 
 func logLevel(level string) slog.Level {

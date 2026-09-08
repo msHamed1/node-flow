@@ -1,5 +1,6 @@
 x-nodeflow-runtime: &nodeflow-runtime
   image: nodeflow-integration:local
+  pull_policy: never
 
 x-nodeflow-build: &nodeflow-build
   <<: *nodeflow-runtime
@@ -76,9 +77,9 @@ services:
       retries: 30
 
   nodeflow-typescript-rollback:
-    <<: *nodeflow-build
+    <<: *nodeflow-runtime
     profiles: ['typescript-rollback']
-    command: ['node', 'packages/cli/dist/cli.js', 'collector']
+    command: ['node', 'apps/collector/dist/rollback.js']
     environment:
       NODEFLOW_HOST: 0.0.0.0
       NODEFLOW_PORT: 7331
@@ -131,7 +132,7 @@ services:
       retries: 30
 
   mock-risk-service:
-    <<: *nodeflow-runtime
+    <<: *nodeflow-build
     command:
       [
         'node',

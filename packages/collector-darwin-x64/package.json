@@ -1,0 +1,41 @@
+{
+  "name": "@mshamed1/node-flow-collector-darwin-x64",
+  "version": "1.1.1",
+  "description": "NodeFlow Go collector runtime for macOS on Intel.",
+  "license": "Apache-2.0",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "nodeflowRuntime": {
+    "protocolVersion": 1,
+    "binary": "bin/nodeflow-collector"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-runtime-packages.mjs --target darwin-x64",
+    "lint": "node ../../scripts/build-runtime-packages.mjs --target darwin-x64 --validate-only",
+    "clean": "node ../../scripts/build-runtime-packages.mjs --target darwin-x64 --clean"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/msHamed1/node-flow.git",
+    "directory": "packages/collector-darwin-x64"
+  },
+  "homepage": "https://github.com/msHamed1/node-flow#readme",
+  "bugs": {
+    "url": "https://github.com/msHamed1/node-flow/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

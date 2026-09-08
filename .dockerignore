@@ -6,6 +6,7 @@ node_modules
 dist
 **/dist
 packages/cli/dashboard
+packages/collector-*/bin
 coverage
 *.tgz
 .env

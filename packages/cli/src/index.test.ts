@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { nodeflow, span, traceBoundary } from '@mshamed1/node-flow';
 import { NodeFlowModule } from '@mshamed1/node-flow/nestjs';
 import { createInstrumentedEnvironment, getNodeFlowPreloadUrl } from './child-environment.js';
+import { RuntimeLaunchError, runtimePackageForHost } from './runtime-launcher.js';
 
 const executeFile = promisify(execFile);
 
@@ -72,11 +73,18 @@ describe('NodeFlow public package', () => {
     expect(environment.EXAMPLE_VALUE).toBe('kept');
   });
 
+  it('reports unsupported native runtime targets precisely', () => {
+    expect(() => runtimePackageForHost('freebsd', 'x64')).toThrow(RuntimeLaunchError);
+    expect(() => runtimePackageForHost('freebsd', 'x64')).toThrow(/freebsd-x64/);
+  });
+
   it('injects the preload into a command launched through node-flow dev', async () => {
     const cliPath = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
     const childScript = [
       "console.log('CHILD_NODE_OPTIONS=' + process.env.NODE_OPTIONS)",
       "console.log('CHILD_COLLECTOR=' + process.env.NODEFLOW_COLLECTOR_URL)",
+      "console.log('CHILD_PROTOCOL=' + process.env.NODEFLOW_EXPORT_PROTOCOL)",
+      "console.log('CHILD_RUNTIME_PID=' + process.env.NODEFLOW_RUNTIME_PID)",
     ].join(';');
     const { stdout } = await executeFile(
       process.execPath,
@@ -86,7 +94,8 @@ describe('NodeFlow public package', () => {
           ...process.env,
           NODE_OPTIONS: '--no-warnings',
           NODEFLOW_PORT: '0',
-          NODEFLOW_DASHBOARD_DIR: '/node-flow-test-dashboard-does-not-exist',
+          NODEFLOW_SPOOL_MODE: 'memory',
+          NODEFLOW_TOPOLOGY_STATE_PATH: join(tmpdir(), `nodeflow-cli-test-${process.pid}.json`),
         },
         timeout: 10_000,
       },
@@ -95,6 +104,8 @@ describe('NodeFlow public package', () => {
     expect(stdout).toContain('NodeFlow started');
     expect(stdout).toContain('CHILD_NODE_OPTIONS=--no-warnings --import=file:');
     expect(stdout).toMatch(/CHILD_COLLECTOR=http:\/\/127\.0\.0\.1:\d+/);
+    expect(stdout).toContain('CHILD_PROTOCOL=protobuf');
+    expect(stdout).toMatch(/CHILD_RUNTIME_PID=\d+/);
   }, 15_000);
 
   it('shows successful command-specific help for snapshot and compare', async () => {

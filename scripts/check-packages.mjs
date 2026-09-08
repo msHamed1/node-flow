@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { publishedPackages } from './release-packages.mjs';
+import { runtimePackages, runtimeProtocolVersion } from './runtime-packages.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const npmCache = resolve(tmpdir(), 'node-flow-npm-cache');
@@ -36,10 +37,32 @@ for (const releasePackage of publishedPackages) {
   try {
     const packed = runPack(releasePackage.directory);
     const filenames = packed.files.map((file) => file.path);
+    const manifest = JSON.parse(
+      readFileSync(resolve(root, releasePackage.directory, 'package.json'), 'utf8'),
+    );
 
-    for (const required of ['package.json', 'dist/index.js', 'dist/index.d.ts']) {
+    const requiredFiles = releasePackage.runtimeTarget
+      ? ['package.json', 'README.md', 'LICENSE', manifest.nodeflowRuntime?.binary].filter(Boolean)
+      : ['package.json', 'dist/index.js', 'dist/index.d.ts'];
+    for (const required of requiredFiles) {
       if (!filenames.includes(required)) {
         failures.push(`${releasePackage.name}: packed artifact is missing ${required}`);
+      }
+    }
+
+    if (releasePackage.runtimeTarget) {
+      const expected = runtimePackages.find(
+        (candidate) => candidate.target === releasePackage.runtimeTarget,
+      );
+      if (
+        !expected ||
+        manifest.name !== expected.packageName ||
+        manifest.os?.[0] !== expected.platform ||
+        manifest.cpu?.[0] !== expected.architecture ||
+        manifest.nodeflowRuntime?.protocolVersion !== runtimeProtocolVersion ||
+        manifest.nodeflowRuntime?.binary !== `bin/${expected.binaryName}`
+      ) {
+        failures.push(`${releasePackage.name}: runtime target metadata is invalid`);
       }
     }
     if (licenseSelected && !filenames.includes('LICENSE')) {
@@ -70,6 +93,18 @@ for (const releasePackage of publishedPackages) {
       const cliSource = readFileSync(cliPath, 'utf8');
       if (!cliSource.startsWith('#!/usr/bin/env node')) {
         failures.push(`${releasePackage.name}: dist/cli.js is missing its Node.js shebang`);
+      }
+      for (const runtime of runtimePackages) {
+        if (manifest.optionalDependencies?.[runtime.packageName] !== manifest.version) {
+          failures.push(
+            `${releasePackage.name}: ${runtime.packageName} must be an exact optional dependency at ${manifest.version}`,
+          );
+        }
+      }
+      if (manifest.dependencies?.['@mshamed1/node-flow-collector']) {
+        failures.push(
+          `${releasePackage.name}: the TypeScript collector must not be a normal CLI dependency`,
+        );
       }
     }
 

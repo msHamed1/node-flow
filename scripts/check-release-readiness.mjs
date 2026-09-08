@@ -2,12 +2,14 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { publishedPackages, repositoryUrl } from './release-packages.mjs';
+import { runtimePackages, runtimeProtocolVersion } from './runtime-packages.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const errors = [];
 const manifests = new Map();
 const rootLicensePath = resolve(root, 'LICENSE');
 const rootLicense = existsSync(rootLicensePath) ? readFileSync(rootLicensePath, 'utf8') : undefined;
+const changesetsConfig = JSON.parse(readFileSync(resolve(root, '.changeset/config.json'), 'utf8'));
 
 for (const releasePackage of publishedPackages) {
   const manifestPath = resolve(root, releasePackage.directory, 'package.json');
@@ -73,6 +75,39 @@ if (mainPackage?.bin?.['node-flow'] !== './dist/cli.js') {
 }
 if (!mainPackage?.exports?.['./nestjs']) {
   errors.push('@mshamed1/node-flow: ./nestjs export is missing');
+}
+for (const runtime of runtimePackages) {
+  const runtimeManifest = manifests.get(runtime.packageName);
+  if (runtimeManifest?.version !== mainPackage?.version) {
+    errors.push(`${runtime.packageName}: version must exactly match @mshamed1/node-flow`);
+  }
+  if (mainPackage?.optionalDependencies?.[runtime.packageName] !== mainPackage?.version) {
+    errors.push(
+      `@mshamed1/node-flow: ${runtime.packageName} must be an exact-version optional dependency`,
+    );
+  }
+  if (
+    runtimeManifest?.os?.[0] !== runtime.platform ||
+    runtimeManifest?.cpu?.[0] !== runtime.architecture ||
+    runtimeManifest?.nodeflowRuntime?.protocolVersion !== runtimeProtocolVersion ||
+    runtimeManifest?.nodeflowRuntime?.binary !== `bin/${runtime.binaryName}`
+  ) {
+    errors.push(`${runtime.packageName}: runtime metadata does not match ${runtime.target}`);
+  }
+}
+if (mainPackage?.dependencies?.['@mshamed1/node-flow-collector']) {
+  errors.push('@mshamed1/node-flow: TypeScript collector must not be a normal dependency');
+}
+const fixedRuntimeGroup = changesetsConfig.fixed?.find((group) =>
+  group.includes('@mshamed1/node-flow'),
+);
+for (const packageName of [
+  '@mshamed1/node-flow',
+  ...runtimePackages.map((runtime) => runtime.packageName),
+]) {
+  if (!fixedRuntimeGroup?.includes(packageName)) {
+    errors.push(`${packageName}: must be in the main/runtime Changesets fixed group`);
+  }
 }
 
 if (errors.length > 0) {
