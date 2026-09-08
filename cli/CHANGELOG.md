@@ -1,5 +1,20 @@
 # @mshamed1/node-flow
 
+## 1.2.0
+
+### Minor Changes
+
+- [#8](https://github.com/msHamed1/node-flow/pull/8) [`d2f93c8`](https://github.com/msHamed1/node-flow/commit/d2f93c88cb3c8ef909eb925f5b37efba4ad26436) Thanks [@msHamed1](https://github.com/msHamed1)! - Launch the Go-authoritative collector from the NodeFlow npm CLI using version-locked native runtime
+  packages for supported macOS, Linux, and Windows systems.
+
+### Patch Changes
+
+- Updated dependencies [[`33755c5`](https://github.com/msHamed1/node-flow/commit/33755c5f1e89db91aa4c4e4bd676975d43368449)]:
+  - @mshamed1/node-flow-protocol@1.2.0
+  - @mshamed1/node-flow-instrumentation-node@1.2.0
+  - @mshamed1/node-flow-topology-engine@1.1.1
+  - @mshamed1/node-flow-core@1.0.2
+
 ## 1.1.1
 
 ### Patch Changes
